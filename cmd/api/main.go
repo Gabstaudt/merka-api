@@ -13,6 +13,7 @@ import (
 	"github.com/merka/api/config"
 	_ "github.com/merka/api/docs/swagger" // gerado por `swag init` — registra o spec no swaggo
 	"github.com/merka/api/internal/handler"
+	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 )
@@ -21,6 +22,10 @@ import (
 // @version      1.0
 // @description  Sistema de comandas multi-tenant (churrascaria como primeira instância). Ver CLAUDE.md e docs/merka-planejamento.md para o contexto completo do domínio.
 // @BasePath     /
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                Informe "Bearer <token>" (token obtido em POST /auth/login)
 func main() {
 	cfg := config.Load()
 
@@ -48,10 +53,21 @@ func main() {
 
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
+	// Rotas públicas
+	userRepo := postgres.NewUserRepository(pool)
+	autenticar := usecase.NewAutenticar(userRepo, cfg.JWTSecret)
+	authHandler := handler.NewAuthHandler(autenticar)
+	authHandler.RegistrarRotas(app)
+
+	// Rotas autenticadas: Auth valida o JWT e injeta user_id/tenant_id/role_id
+	// no contexto; Tenant, na sequência, ativa o Row Level Security do
+	// Postgres para o tenant_id resolvido (ver internal/middleware/tenant.go).
+	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool))
+
 	comandaRepo := postgres.NewComandaRepository(pool)
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	comandaHandler := handler.NewComandaHandler(abrirComanda)
-	comandaHandler.RegistrarRotas(app)
+	comandaHandler.RegistrarRotas(protegidas)
 
 	log.Printf("Merka API rodando na porta %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

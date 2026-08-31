@@ -34,6 +34,18 @@ definitions:
       table_id:
         type: string
     type: object
+  handler.loginRequest:
+    properties:
+      login:
+        type: string
+      senha:
+        type: string
+    type: object
+  handler.loginResponse:
+    properties:
+      token:
+        type: string
+    type: object
 info:
   contact: {}
   description: Sistema de comandas multi-tenant (churrascaria como primeira instância).
@@ -41,13 +53,49 @@ info:
   title: Merka API
   version: "1.0"
 paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 'Valida login/senha e devolve um JWT contendo user_id, tenant_id
+        e role_id, usado nas demais rotas via header Authorization: Bearer <token>.'
+      parameters:
+      - description: Credenciais
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.loginResponse'
+        "400":
+          description: corpo da requisição inválido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: login ou senha inválidos
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Autenticar usuário
+      tags:
+      - auth
   /comandas/{codigo}/abrir:
     post:
       consumes:
       - application/json
-      description: Porteiro escaneia/seleciona a comanda física e o sistema a marca
+      description: 'Porteiro escaneia/seleciona a comanda física e o sistema a marca
         como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não
-        estiver com status "disponivel".
+        estiver com status "disponivel". Requer autenticação (Authorization: Bearer
+        <token>).'
       parameters:
       - description: Código físico da comanda (código de barras/QR)
         in: path
@@ -66,6 +114,12 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/domain.Comanda'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
         "404":
           description: comanda não encontrada
           schema:
@@ -84,7 +138,15 @@ paths:
             additionalProperties:
               type: string
             type: object
+      security:
+      - BearerAuth: []
       summary: Entregar comanda zerada ao cliente (US-07)
       tags:
       - comandas
+securityDefinitions:
+  BearerAuth:
+    description: Informe "Bearer <token>" (token obtido em POST /auth/login)
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

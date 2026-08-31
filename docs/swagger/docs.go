@@ -15,9 +15,66 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/login": {
+            "post": {
+                "description": "Valida login/senha e devolve um JWT contendo user_id, tenant_id e role_id, usado nas demais rotas via header Authorization: Bearer \u003ctoken\u003e.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Autenticar usuário",
+                "parameters": [
+                    {
+                        "description": "Credenciais",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.loginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.loginResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "corpo da requisição inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "login ou senha inválidos",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{codigo}/abrir": {
             "post": {
-                "description": "Porteiro escaneia/seleciona a comanda física e o sistema a marca como \"em_uso\", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status \"disponivel\".",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Porteiro escaneia/seleciona a comanda física e o sistema a marca como \"em_uso\", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status \"disponivel\". Requer autenticação (Authorization: Bearer \u003ctoken\u003e).",
                 "consumes": [
                     "application/json"
                 ],
@@ -50,6 +107,15 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     },
                     "404": {
@@ -132,6 +198,33 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "handler.loginRequest": {
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string"
+                },
+                "senha": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.loginResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Informe \"Bearer \u003ctoken\u003e\" (token obtido em POST /auth/login)",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

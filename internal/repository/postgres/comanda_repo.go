@@ -34,8 +34,10 @@ func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.U
 		WHERE tenant_id = $1 AND codigo_fisico = $2
 	`
 
+	db := connFromCtx(ctx, r.pool)
+
 	var c domain.Comanda
-	err := r.pool.QueryRow(ctx, query, tenantID, codigoFisico).Scan(
+	err := db.QueryRow(ctx, query, tenantID, codigoFisico).Scan(
 		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -51,7 +53,8 @@ func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.U
 func (r *comandaRepository) AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error {
 	const query = `UPDATE comandas SET status = $1 WHERE id = $2`
 
-	tag, err := r.pool.Exec(ctx, query, novoStatus, comandaID)
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, novoStatus, comandaID)
 	if err != nil {
 		return fmt.Errorf("atualizar status da comanda: %w", err)
 	}
@@ -69,7 +72,8 @@ func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUI
 		WHERE id = $4
 	`
 
-	tag, err := r.pool.Exec(ctx, query, domain.StatusEmUso, tableID, abertaEm, comandaID)
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, domain.StatusEmUso, tableID, abertaEm, comandaID)
 	if err != nil {
 		return fmt.Errorf("abrir comanda: %w", err)
 	}

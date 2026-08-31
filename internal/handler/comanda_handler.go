@@ -6,14 +6,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 )
-
-// TODO: remover assim que o middleware de auth/tenant existir — por ora
-// todo o sistema opera sob um único tenant fixo para permitir testar o
-// fluxo ponta a ponta sem JWT.
-var tenantIDFixo = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 type ComandaHandler struct {
 	abrirComanda *usecase.AbrirComanda
@@ -23,9 +19,10 @@ func NewComandaHandler(abrirComanda *usecase.AbrirComanda) *ComandaHandler {
 	return &ComandaHandler{abrirComanda: abrirComanda}
 }
 
-// RegistrarRotas conecta as rotas de comanda no app Fiber.
-func (h *ComandaHandler) RegistrarRotas(app *fiber.App) {
-	app.Post("/comandas/:codigo/abrir", h.Abrir)
+// RegistrarRotas conecta as rotas de comanda no router informado — espera-se
+// que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
+func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
+	router.Post("/comandas/:codigo/abrir", h.Abrir)
 }
 
 // abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.
@@ -35,19 +32,26 @@ type abrirComandaRequest struct {
 
 // Abrir godoc
 // @Summary      Entregar comanda zerada ao cliente (US-07)
-// @Description  Porteiro escaneia/seleciona a comanda física e o sistema a marca como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status "disponivel".
+// @Description  Porteiro escaneia/seleciona a comanda física e o sistema a marca como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status "disponivel". Requer autenticação (Authorization: Bearer <token>).
 // @Tags         comandas
+// @Security     BearerAuth
 // @Accept       json
 // @Produce      json
 // @Param        codigo  path      string                true  "Código físico da comanda (código de barras/QR)"
 // @Param        body    body      abrirComandaRequest    false "Mesa a associar à comanda (opcional)"
 // @Success      200     {object}  domain.Comanda
+// @Failure      401     {object}  map[string]string  "token ausente, inválido ou expirado"
 // @Failure      404     {object}  map[string]string  "comanda não encontrada"
 // @Failure      409     {object}  map[string]string  "comanda não está disponível (em uso, paga ou cancelada)"
 // @Failure      500     {object}  map[string]string  "erro interno"
 // @Router       /comandas/{codigo}/abrir [post]
 func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 	codigo := c.Params("codigo")
+
+	tenantID, ok := c.Locals(middleware.LocalTenantID).(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant não identificado — autentique-se novamente"})
+	}
 
 	var req abrirComandaRequest
 	if len(c.Body()) > 0 {
@@ -56,7 +60,7 @@ func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 		}
 	}
 
-	comanda, err := h.abrirComanda.Executar(c.Context(), tenantIDFixo, codigo, req.TableID)
+	comanda, err := h.abrirComanda.Executar(c.UserContext(), tenantID, codigo, req.TableID)
 	if err != nil {
 		switch {
 		case errors.Is(err, postgres.ErrComandaNaoEncontrada):

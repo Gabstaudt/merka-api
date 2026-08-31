@@ -24,3 +24,9 @@ type ComandaRepository interface {
 	// timestamp de abertura.
 	AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error
 }
+
+// UserRepository define o contrato de persistência para usuários —
+// usado pelo usecase de autenticação (login).
+type UserRepository interface {
+	BuscarPorLogin(ctx context.Context, login string) (*domain.User, error)
+}

@@ -1,0 +1,90 @@
+basePath: /
+definitions:
+  domain.Comanda:
+    properties:
+      abertaEm:
+        type: string
+      codigoFisico:
+        type: string
+      fechadaEm:
+        type: string
+      id:
+        type: string
+      status:
+        $ref: '#/definitions/domain.StatusComanda'
+      tableID:
+        type: string
+      tenantID:
+        type: string
+    type: object
+  domain.StatusComanda:
+    enum:
+    - disponivel
+    - em_uso
+    - paga
+    - cancelada
+    type: string
+    x-enum-varnames:
+    - StatusDisponivel
+    - StatusEmUso
+    - StatusPaga
+    - StatusCancelada
+  handler.abrirComandaRequest:
+    properties:
+      table_id:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Sistema de comandas multi-tenant (churrascaria como primeira instância).
+    Ver CLAUDE.md e docs/merka-planejamento.md para o contexto completo do domínio.
+  title: Merka API
+  version: "1.0"
+paths:
+  /comandas/{codigo}/abrir:
+    post:
+      consumes:
+      - application/json
+      description: Porteiro escaneia/seleciona a comanda física e o sistema a marca
+        como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não
+        estiver com status "disponivel".
+      parameters:
+      - description: Código físico da comanda (código de barras/QR)
+        in: path
+        name: codigo
+        required: true
+        type: string
+      - description: Mesa a associar à comanda (opcional)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handler.abrirComandaRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comanda'
+        "404":
+          description: comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda não está disponível (em uso, paga ou cancelada)
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Entregar comanda zerada ao cliente (US-07)
+      tags:
+      - comandas
+swagger: "2.0"

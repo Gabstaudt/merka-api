@@ -28,10 +28,35 @@ func (h *ComandaHandler) RegistrarRotas(app *fiber.App) {
 	app.Post("/comandas/:codigo/abrir", h.Abrir)
 }
 
+// abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.
+type abrirComandaRequest struct {
+	TableID *uuid.UUID `json:"table_id"`
+}
+
+// Abrir godoc
+// @Summary      Entregar comanda zerada ao cliente (US-07)
+// @Description  Porteiro escaneia/seleciona a comanda física e o sistema a marca como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status "disponivel".
+// @Tags         comandas
+// @Accept       json
+// @Produce      json
+// @Param        codigo  path      string                true  "Código físico da comanda (código de barras/QR)"
+// @Param        body    body      abrirComandaRequest    false "Mesa a associar à comanda (opcional)"
+// @Success      200     {object}  domain.Comanda
+// @Failure      404     {object}  map[string]string  "comanda não encontrada"
+// @Failure      409     {object}  map[string]string  "comanda não está disponível (em uso, paga ou cancelada)"
+// @Failure      500     {object}  map[string]string  "erro interno"
+// @Router       /comandas/{codigo}/abrir [post]
 func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 	codigo := c.Params("codigo")
 
-	comanda, err := h.abrirComanda.Executar(c.Context(), tenantIDFixo, codigo)
+	var req abrirComandaRequest
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+		}
+	}
+
+	comanda, err := h.abrirComanda.Executar(c.Context(), tenantIDFixo, codigo, req.TableID)
 	if err != nil {
 		switch {
 		case errors.Is(err, postgres.ErrComandaNaoEncontrada):

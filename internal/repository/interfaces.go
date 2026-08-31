@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -13,5 +14,13 @@ import (
 // apenas desta interface.
 type ComandaRepository interface {
 	BuscarPorCodigo(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error)
-	Atualizar(ctx context.Context, comanda *domain.Comanda) error
+
+	// AtualizarStatus troca o status da comanda (ex: liberar_comanda,
+	// cancelar_comanda). Não mexe em table_id/aberta_em/fechada_em.
+	AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error
+
+	// AbrirComanda persiste a transição disponivel -> em_uso feita pelo
+	// Porteiro (US-07): seta status, mesa associada (opcional) e o
+	// timestamp de abertura.
+	AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error
 }

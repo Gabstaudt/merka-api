@@ -8,13 +8,19 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 
 	"github.com/merka/api/config"
+	_ "github.com/merka/api/docs/swagger" // gerado por `swag init` — registra o spec no swaggo
 	"github.com/merka/api/internal/handler"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 )
 
+// @title        Merka API
+// @version      1.0
+// @description  Sistema de comandas multi-tenant (churrascaria como primeira instância). Ver CLAUDE.md e docs/merka-planejamento.md para o contexto completo do domínio.
+// @BasePath     /
 func main() {
 	cfg := config.Load()
 
@@ -39,6 +45,8 @@ func main() {
 			"service": "merka-api",
 		})
 	})
+
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	comandaRepo := postgres.NewComandaRepository(pool)
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)

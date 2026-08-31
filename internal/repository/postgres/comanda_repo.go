@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -47,19 +48,30 @@ func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.U
 	return &c, nil
 }
 
-func (r *comandaRepository) Atualizar(ctx context.Context, comanda *domain.Comanda) error {
+func (r *comandaRepository) AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error {
+	const query = `UPDATE comandas SET status = $1 WHERE id = $2`
+
+	tag, err := r.pool.Exec(ctx, query, novoStatus, comandaID)
+	if err != nil {
+		return fmt.Errorf("atualizar status da comanda: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrComandaNaoEncontrada
+	}
+
+	return nil
+}
+
+func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error {
 	const query = `
 		UPDATE comandas
-		SET status = $1, table_id = $2, aberta_em = $3, fechada_em = $4
-		WHERE id = $5 AND tenant_id = $6
+		SET status = $1, table_id = $2, aberta_em = $3, fechada_em = NULL
+		WHERE id = $4
 	`
 
-	tag, err := r.pool.Exec(ctx, query,
-		comanda.Status, comanda.TableID, comanda.AbertaEm, comanda.FechadaEm,
-		comanda.ID, comanda.TenantID,
-	)
+	tag, err := r.pool.Exec(ctx, query, domain.StatusEmUso, tableID, abertaEm, comandaID)
 	if err != nil {
-		return fmt.Errorf("atualizar comanda: %w", err)
+		return fmt.Errorf("abrir comanda: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrComandaNaoEncontrada

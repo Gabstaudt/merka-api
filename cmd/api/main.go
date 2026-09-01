@@ -17,6 +17,7 @@ import (
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
+	"github.com/merka/api/internal/ws"
 )
 
 // @title        Merka API
@@ -60,28 +61,48 @@ func main() {
 	authHandler := handler.NewAuthHandler(autenticar)
 	authHandler.RegistrarRotas(app)
 
-	// Rotas autenticadas: Auth valida o JWT e injeta user_id/tenant_id/role_id
-	// no contexto; Tenant, na sequência, ativa o Row Level Security do
-	// Postgres para o tenant_id resolvido (ver internal/middleware/tenant.go).
-	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool))
-
 	comandaRepo := postgres.NewComandaRepository(pool)
 	productRepo := postgres.NewProductRepository(pool)
 	orderItemRepo := postgres.NewOrderItemRepository(pool)
 	paymentRepo := postgres.NewPaymentRepository(pool)
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
 	auditWriter := audit.NewWriter(pool)
+	hub := ws.NewHub()
+
+	// GET /ws precisa ser registrado ANTES do app.Group("/", ...) abaixo:
+	// um Group com prefixo "/" vira middleware casando com qualquer rota
+	// registrada depois dele em todo o app (não só dentro do próprio
+	// grupo) — se /ws entrasse depois, cairia no Auth de header
+	// (Authorization: Bearer) e nunca no fluxo de querystring. O WebSocket
+	// nativo do browser não permite headers customizados no handshake, daí
+	// a autenticação via ?token= dentro do próprio handler (ver
+	// internal/handler/ws_handler.go).
+	wsHandler := handler.NewWSHandler(hub, cfg.JWTSecret)
+	wsHandler.RegistrarRotas(app)
+
+	// Rotas autenticadas: Auth valida o JWT e injeta user_id/tenant_id/role_id
+	// no contexto; Tenant, na sequência, ativa o Row Level Security do
+	// Postgres para o tenant_id resolvido (ver internal/middleware/tenant.go).
+	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool))
 
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo)
 
-	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter)
+	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub)
 	comandaHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter)
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub)
 	paymentHandler.RegistrarRotas(protegidas)
+
+	// Worker de pendência de 30s (seção 15 do planejamento) — roda em
+	// background pela vida inteira do processo; ver TODO em
+	// internal/ws/pendencia_worker.go sobre o estado atual desse fluxo.
+	workerCtx, pararWorker := context.WithCancel(context.Background())
+	defer pararWorker()
+	pendenciaWorker := ws.NewPendenciaWorker(hub, syncAlertRepo)
+	go pendenciaWorker.Run(workerCtx)
 
 	log.Printf("Merka API rodando na porta %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

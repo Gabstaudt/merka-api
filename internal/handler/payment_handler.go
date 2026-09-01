@@ -9,15 +9,17 @@ import (
 	"github.com/merka/api/internal/audit"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
+	"github.com/merka/api/internal/ws"
 )
 
 type PaymentHandler struct {
 	fecharPagamento *usecase.FecharPagamento
 	auditWriter     *audit.Writer
+	hub             *ws.Hub
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer) *PaymentHandler {
-	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter}
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer, hub *ws.Hub) *PaymentHandler {
+	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter, hub: hub}
 }
 
 // RegistrarRotas conecta as rotas de pagamento no router informado —
@@ -103,6 +105,10 @@ func (h *PaymentHandler) Fechar(c *fiber.Ctx) error {
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
 		}
+	}
+
+	for _, comandaID := range req.ComandaIDs {
+		h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comandaID, "pagamento_fechado"))
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fecharPagamentoResponse{PaymentIDs: paymentIDs})

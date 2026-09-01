@@ -20,13 +20,49 @@ const (
 	LocalRoleID   = "role_id"
 )
 
+// Identidade é o resultado de validar um JWT — o mesmo trio
+// user_id/tenant_id/role_id que Auth injeta em fiber.Ctx.Locals, exposto
+// aqui como valor de retorno para ser reaproveitado por qualquer código
+// que não passe pelo fluxo normal de middleware HTTP (ex: o handshake de
+// GET /ws, que autentica via querystring — ver ValidarToken).
+type Identidade struct {
+	UserID   uuid.UUID
+	TenantID uuid.UUID
+	RoleID   uuid.UUID
+}
+
+// ValidarToken valida a assinatura/expiração de um JWT emitido em
+// POST /auth/login e devolve a identidade nele contida. Compartilhado
+// entre Auth (header Authorization) e o handshake do WebSocket
+// (querystring ?token=, já que o WebSocket nativo do browser não permite
+// headers customizados).
+func ValidarToken(jwtSecret, tokenString string) (Identidade, error) {
+	claims := &usecase.Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return Identidade{}, errors.New("método de assinatura inesperado")
+		}
+		return []byte(jwtSecret), nil
+	})
+	if err != nil || !token.Valid {
+		return Identidade{}, errors.New("token inválido ou expirado")
+	}
+
+	userID, err1 := uuid.Parse(claims.UserID)
+	tenantID, err2 := uuid.Parse(claims.TenantID)
+	roleID, err3 := uuid.Parse(claims.RoleID)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return Identidade{}, errors.New("token inválido")
+	}
+
+	return Identidade{UserID: userID, TenantID: tenantID, RoleID: roleID}, nil
+}
+
 // Auth valida o JWT emitido em POST /auth/login (Authorization: Bearer
 // <token>) e injeta user_id/tenant_id/role_id no contexto da requisição.
 // Retorna 401 se o header estiver ausente, malformado ou o token for
 // inválido/expirado.
 func Auth(jwtSecret string) fiber.Handler {
-	secret := []byte(jwtSecret)
-
 	return func(c *fiber.Ctx) error {
 		header := c.Get("Authorization")
 		if header == "" {
@@ -38,27 +74,14 @@ func Auth(jwtSecret string) fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "header Authorization deve ser 'Bearer <token>'"})
 		}
 
-		claims := &usecase.Claims{}
-		token, err := jwt.ParseWithClaims(partes[1], claims, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("método de assinatura inesperado")
-			}
-			return secret, nil
-		})
-		if err != nil || !token.Valid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "token inválido ou expirado"})
+		identidade, err := ValidarToken(jwtSecret, partes[1])
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": err.Error()})
 		}
 
-		userID, err1 := uuid.Parse(claims.UserID)
-		tenantID, err2 := uuid.Parse(claims.TenantID)
-		roleID, err3 := uuid.Parse(claims.RoleID)
-		if err1 != nil || err2 != nil || err3 != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "token inválido"})
-		}
-
-		c.Locals(LocalUserID, userID)
-		c.Locals(LocalTenantID, tenantID)
-		c.Locals(LocalRoleID, roleID)
+		c.Locals(LocalUserID, identidade.UserID)
+		c.Locals(LocalTenantID, identidade.TenantID)
+		c.Locals(LocalRoleID, identidade.RoleID)
 
 		return c.Next()
 	}

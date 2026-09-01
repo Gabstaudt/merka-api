@@ -11,6 +11,7 @@ import (
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
+	"github.com/merka/api/internal/ws"
 )
 
 type ComandaHandler struct {
@@ -18,14 +19,16 @@ type ComandaHandler struct {
 	registrarPeso *usecase.RegistrarPeso
 	lancarItem    *usecase.LancarItem
 	auditWriter   *audit.Writer
+	hub           *ws.Hub
 }
 
-func NewComandaHandler(abrirComanda *usecase.AbrirComanda, registrarPeso *usecase.RegistrarPeso, lancarItem *usecase.LancarItem, auditWriter *audit.Writer) *ComandaHandler {
+func NewComandaHandler(abrirComanda *usecase.AbrirComanda, registrarPeso *usecase.RegistrarPeso, lancarItem *usecase.LancarItem, auditWriter *audit.Writer, hub *ws.Hub) *ComandaHandler {
 	return &ComandaHandler{
 		abrirComanda:  abrirComanda,
 		registrarPeso: registrarPeso,
 		lancarItem:    lancarItem,
 		auditWriter:   auditWriter,
+		hub:           hub,
 	}
 }
 
@@ -97,6 +100,8 @@ func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 		}
 	}
 
+	h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comanda.ID, "comanda_aberta"))
+
 	return c.JSON(comanda)
 }
 
@@ -149,8 +154,10 @@ func (h *ComandaHandler) RegistrarPeso(c *fiber.Ctx) error {
 		},
 	)
 	if err != nil {
-		return responderErroLancamento(c, err)
+		return h.responderErroLancamento(c, tenantID, comandaID, err)
 	}
+
+	h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comandaID, "peso_registrado"))
 
 	return c.Status(fiber.StatusCreated).JSON(item)
 }
@@ -204,8 +211,10 @@ func (h *ComandaHandler) LancarItem(c *fiber.Ctx) error {
 		},
 	)
 	if err != nil {
-		return responderErroLancamento(c, err)
+		return h.responderErroLancamento(c, tenantID, comandaID, err)
 	}
+
+	h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comandaID, "item_lancado"))
 
 	return c.Status(fiber.StatusCreated).JSON(item)
 }
@@ -213,14 +222,21 @@ func (h *ComandaHandler) LancarItem(c *fiber.Ctx) error {
 // responderErroLancamento traduz os erros comuns a registrar_peso e
 // lancar_item (comanda/produto não encontrados, conflito de
 // sincronização) em respostas HTTP — nunca deixa o handler travar: todo
-// erro conhecido vira uma resposta clara, o resto cai em 500.
-func responderErroLancamento(c *fiber.Ctx, err error) error {
+// erro conhecido vira uma resposta clara, o resto cai em 500. No caso de
+// conflito de sincronização, além da linha já gravada em sync_alerts
+// (dentro do usecase), dispara imediatamente o evento "alerta_pendencia"
+// para o painel do Gestor — a notificação dupla (dispositivo de origem +
+// Gestor, ao mesmo tempo) descrita na seção 15 do documento de
+// planejamento. O worker de 30s (internal/ws/pendencia_worker.go) cobre o
+// outro tipo de alerta ('pendencia_30s'), que hoje ninguém ainda gera.
+func (h *ComandaHandler) responderErroLancamento(c *fiber.Ctx, tenantID, comandaID uuid.UUID, err error) error {
 	switch {
 	case errors.Is(err, postgres.ErrComandaNaoEncontrada):
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "comanda não encontrada"})
 	case errors.Is(err, postgres.ErrProdutoNaoEncontrado):
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "produto não encontrado"})
 	case errors.Is(err, usecase.ErrConflitoSincronizacao):
+		h.hub.Broadcast(tenantID, ws.NovoEventoAlertaPendencia(&comandaID, string(domain.TipoAlertaComandaJaFinalizada), nil))
 		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
 	default:
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})

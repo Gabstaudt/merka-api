@@ -63,8 +63,15 @@ type PaymentRepository interface {
 
 // SyncAlertRepository define o contrato de persistência para os alertas
 // de sincronização (seção 15 do documento de planejamento): pendência de
-// 30s (ainda não usado) e conflito de "comanda já finalizada" — usado por
+// 30s e conflito de "comanda já finalizada" — este último gravado por
 // registrar_peso/lancar_item quando a comanda não aceita mais lançamento.
 type SyncAlertRepository interface {
 	RegistrarConflitoComandaFinalizada(ctx context.Context, tenantID, comandaID, origemUserID uuid.UUID, detalhes map[string]any) error
+
+	// ListarPendenciasNaoResolvidas busca alertas do tipo 'pendencia_30s'
+	// ainda não resolvidos, criados antes de `criadoAntesDe` — usado pelo
+	// worker de background (internal/ws/pendencia_worker.go). Roda fora do
+	// contexto de uma requisição HTTP (sem tenant fixado via RLS), então
+	// varre todos os tenants de uma vez.
+	ListarPendenciasNaoResolvidas(ctx context.Context, criadoAntesDe time.Time) ([]domain.SyncAlert, error)
 }

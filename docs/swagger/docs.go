@@ -147,6 +147,245 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/comandas/{id}/itens": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Garçom lança um item do cardápio (bebida, sobremesa, etc.) na comanda. Se a comanda já não aceitar lançamento (paga/cancelada), o lançamento é rejeitado e um alerta é gravado em sync_alerts para o Gestor (conflito de sincronização).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Lançar item unitário na comanda (US-11)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Produto e quantidade",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.lancarItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.OrderItem"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda ou produto não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/pesos": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Balança lê o peso bruto do prato; o backend calcula (peso_bruto - tara) * preco_por_kg e lança em order_items. Se a comanda já não aceitar lançamento (paga/cancelada), o lançamento é rejeitado e um alerta é gravado em sync_alerts para o Gestor (conflito de sincronização).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Registrar peso de item na comanda (US-09)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Produto pesado e peso bruto lido",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.registrarPesoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.OrderItem"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda ou produto não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/pagamentos": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soma o total ativo (itens + pesos, excluindo removidos/estornados) das comandas informadas — que podem ser N comandas de uma mesma mesa — e confere contra a soma dos pagamentos parciais informados (suporta pagamento misto). Se bater, grava um payment por método, liga todas as comandas via payment_comandas e marca as comandas como \"paga\". Não emite nota fiscal ainda (ver TODO no usecase para US-14/emissão de NFC-e).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pagamentos"
+                ],
+                "summary": "Fechar pagamento de uma ou mais comandas (US-13 + US-14)",
+                "parameters": [
+                    {
+                        "description": "Comandas a fechar e pagamentos parciais",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.fecharPagamentoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handler.fecharPagamentoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "corpo inválido, método inválido ou soma dos pagamentos não bate com o total",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "alguma comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -176,6 +415,46 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.OrderItem": {
+            "type": "object",
+            "properties": {
+                "comandaID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lancadoEm": {
+                    "type": "string"
+                },
+                "lancadoPor": {
+                    "type": "string"
+                },
+                "pesoKg": {
+                    "description": "usado para itens de peso (peso líquido, já descontada a tara)",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "productID": {
+                    "type": "string"
+                },
+                "quantidade": {
+                    "description": "usado para itens unitários",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "status": {
+                    "$ref": "#/definitions/domain.StatusOrderItem"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "valor": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
         "domain.StatusComanda": {
             "type": "string",
             "enum": [
@@ -191,11 +470,63 @@ const docTemplate = `{
                 "StatusCancelada"
             ]
         },
+        "domain.StatusOrderItem": {
+            "type": "string",
+            "enum": [
+                "ativo",
+                "removido",
+                "estornado"
+            ],
+            "x-enum-varnames": [
+                "StatusItemAtivo",
+                "StatusItemRemovido",
+                "StatusItemEstornado"
+            ]
+        },
         "handler.abrirComandaRequest": {
             "type": "object",
             "properties": {
                 "table_id": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.fecharPagamentoRequest": {
+            "type": "object",
+            "properties": {
+                "comanda_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "pagamentos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handler.pagamentoParcialRequest"
+                    }
+                }
+            }
+        },
+        "handler.fecharPagamentoResponse": {
+            "type": "object",
+            "properties": {
+                "payment_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "handler.lancarItemRequest": {
+            "type": "object",
+            "properties": {
+                "product_id": {
+                    "type": "string"
+                },
+                "quantidade": {
+                    "type": "number"
                 }
             }
         },
@@ -214,6 +545,28 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.pagamentoParcialRequest": {
+            "type": "object",
+            "properties": {
+                "metodo": {
+                    "type": "string"
+                },
+                "valor": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.registrarPesoRequest": {
+            "type": "object",
+            "properties": {
+                "peso_bruto": {
+                    "type": "number"
+                },
+                "product_id": {
                     "type": "string"
                 }
             }

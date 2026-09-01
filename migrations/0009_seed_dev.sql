@@ -29,3 +29,26 @@ VALUES (
   '$2a$10$drhqElkWjgXMnaphECpvFemwBz6Ib//OZogwxDo62SpaYgKDPK7la'
 )
 ON CONFLICT (tenant_id, login) DO NOTHING;
+
+-- Produtos de teste para os fluxos de registrar_peso (US-09) e lancar_item
+-- (US-11): um item por peso (buffet) e um item unitário (bebida).
+INSERT INTO products (id, tenant_id, nome, tipo_cobranca, preco_por_kg, tara_kg)
+VALUES (
+  '00000000-0000-0000-0000-000000000004',
+  '00000000-0000-0000-0000-000000000001',
+  'Buffet por Peso',
+  'peso',
+  79.90,
+  0.350
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO products (id, tenant_id, nome, tipo_cobranca, preco_unitario)
+VALUES (
+  '00000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000001',
+  'Refrigerante Lata',
+  'unitario',
+  7.00
+)
+ON CONFLICT (id) DO NOTHING;

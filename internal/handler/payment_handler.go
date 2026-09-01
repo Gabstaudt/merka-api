@@ -1,0 +1,88 @@
+package handler
+
+import (
+	"errors"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+
+	"github.com/merka/api/internal/repository/postgres"
+	"github.com/merka/api/internal/usecase"
+)
+
+type PaymentHandler struct {
+	fecharPagamento *usecase.FecharPagamento
+}
+
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento) *PaymentHandler {
+	return &PaymentHandler{fecharPagamento: fecharPagamento}
+}
+
+// RegistrarRotas conecta as rotas de pagamento no router informado —
+// espera-se que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
+func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
+	router.Post("/pagamentos", h.Fechar)
+}
+
+type pagamentoParcialRequest struct {
+	Metodo string  `json:"metodo"`
+	Valor  float64 `json:"valor"`
+}
+
+// fecharPagamentoRequest é o corpo de POST /pagamentos.
+type fecharPagamentoRequest struct {
+	ComandaIDs []uuid.UUID               `json:"comanda_ids"`
+	Pagamentos []pagamentoParcialRequest `json:"pagamentos"`
+}
+
+type fecharPagamentoResponse struct {
+	PaymentIDs []uuid.UUID `json:"payment_ids"`
+}
+
+// Fechar godoc
+// @Summary      Fechar pagamento de uma ou mais comandas (US-13 + US-14)
+// @Description  Soma o total ativo (itens + pesos, excluindo removidos/estornados) das comandas informadas — que podem ser N comandas de uma mesma mesa — e confere contra a soma dos pagamentos parciais informados (suporta pagamento misto). Se bater, grava um payment por método, liga todas as comandas via payment_comandas e marca as comandas como "paga". Não emite nota fiscal ainda (ver TODO no usecase para US-14/emissão de NFC-e).
+// @Tags         pagamentos
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      fecharPagamentoRequest    true  "Comandas a fechar e pagamentos parciais"
+// @Success      201   {object}  fecharPagamentoResponse
+// @Failure      400   {object}  map[string]string  "corpo inválido, método inválido ou soma dos pagamentos não bate com o total"
+// @Failure      401   {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      404   {object}  map[string]string  "alguma comanda não encontrada"
+// @Failure      500   {object}  map[string]string  "erro interno"
+// @Router       /pagamentos [post]
+func (h *PaymentHandler) Fechar(c *fiber.Ctx) error {
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	var req fecharPagamentoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+	}
+
+	pagamentos := make([]usecase.PagamentoParcial, 0, len(req.Pagamentos))
+	for _, p := range req.Pagamentos {
+		pagamentos = append(pagamentos, usecase.PagamentoParcial{Metodo: p.Metodo, Valor: p.Valor})
+	}
+
+	paymentIDs, err := h.fecharPagamento.Executar(c.UserContext(), tenantID, userID, req.ComandaIDs, pagamentos)
+	if err != nil {
+		switch {
+		case errors.Is(err, postgres.ErrComandaNaoEncontrada):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "comanda não encontrada"})
+		case errors.Is(err, usecase.ErrNenhumaComanda),
+			errors.Is(err, usecase.ErrNenhumPagamento),
+			errors.Is(err, usecase.ErrMetodoInvalido),
+			errors.Is(err, usecase.ErrValorNaoBate):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fecharPagamentoResponse{PaymentIDs: paymentIDs})
+}

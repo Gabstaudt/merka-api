@@ -65,9 +65,21 @@ func main() {
 	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool))
 
 	comandaRepo := postgres.NewComandaRepository(pool)
+	productRepo := postgres.NewProductRepository(pool)
+	orderItemRepo := postgres.NewOrderItemRepository(pool)
+	paymentRepo := postgres.NewPaymentRepository(pool)
+	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
+
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
-	comandaHandler := handler.NewComandaHandler(abrirComanda)
+	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
+	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo)
+
+	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem)
 	comandaHandler.RegistrarRotas(protegidas)
+
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento)
+	paymentHandler.RegistrarRotas(protegidas)
 
 	log.Printf("Merka API rodando na porta %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

@@ -50,6 +50,29 @@ func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.U
 	return &c, nil
 }
 
+func (r *comandaRepository) BuscarPorID(ctx context.Context, tenantID, comandaID uuid.UUID) (*domain.Comanda, error) {
+	const query = `
+		SELECT id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em
+		FROM comandas
+		WHERE tenant_id = $1 AND id = $2
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	var c domain.Comanda
+	err := db.QueryRow(ctx, query, tenantID, comandaID).Scan(
+		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrComandaNaoEncontrada
+	}
+	if err != nil {
+		return nil, fmt.Errorf("buscar comanda por id: %w", err)
+	}
+
+	return &c, nil
+}
+
 func (r *comandaRepository) AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error {
 	const query = `UPDATE comandas SET status = $1 WHERE id = $2`
 

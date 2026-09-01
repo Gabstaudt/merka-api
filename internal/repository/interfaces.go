@@ -15,6 +15,10 @@ import (
 type ComandaRepository interface {
 	BuscarPorCodigo(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error)
 
+	// BuscarPorID busca a comanda pelo id (rotas de peso/item/pagamento
+	// recebem o id da comanda no path, não o código físico).
+	BuscarPorID(ctx context.Context, tenantID, comandaID uuid.UUID) (*domain.Comanda, error)
+
 	// AtualizarStatus troca o status da comanda (ex: liberar_comanda,
 	// cancelar_comanda). Não mexe em table_id/aberta_em/fechada_em.
 	AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error
@@ -29,4 +33,38 @@ type ComandaRepository interface {
 // usado pelo usecase de autenticação (login).
 type UserRepository interface {
 	BuscarPorLogin(ctx context.Context, login string) (*domain.User, error)
+}
+
+// ProductRepository define o contrato de persistência para o catálogo de
+// produtos — usado pelos usecases de lançamento (registrar_peso,
+// lancar_item) para ler preço/tara na hora do cálculo.
+type ProductRepository interface {
+	BuscarPorID(ctx context.Context, tenantID, productID uuid.UUID) (*domain.Product, error)
+}
+
+// OrderItemRepository define o contrato de persistência para os itens
+// lançados na comanda (peso e unitário, unificados — ver domain/order_item.go).
+type OrderItemRepository interface {
+	Criar(ctx context.Context, item *domain.OrderItem) error
+
+	// SomarTotalAtivo soma o valor de todos os order_items com status
+	// 'ativo' das comandas informadas (itens removidos/estornados não
+	// entram na conta) — usado pelo fechamento de pagamento (US-13/US-14)
+	// para validar que a soma dos pagamentos parciais bate com o total.
+	SomarTotalAtivo(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error)
+}
+
+// PaymentRepository define o contrato de persistência para pagamentos —
+// grava um payment por método informado e liga todas as comandas do
+// fechamento via payment_comandas (US-13/US-14).
+type PaymentRepository interface {
+	CriarPagamento(ctx context.Context, tenantID uuid.UUID, metodo string, valor float64, processadoPor uuid.UUID, comandaIDs []uuid.UUID) (uuid.UUID, error)
+}
+
+// SyncAlertRepository define o contrato de persistência para os alertas
+// de sincronização (seção 15 do documento de planejamento): pendência de
+// 30s (ainda não usado) e conflito de "comanda já finalizada" — usado por
+// registrar_peso/lancar_item quando a comanda não aceita mais lançamento.
+type SyncAlertRepository interface {
+	RegistrarConflitoComandaFinalizada(ctx context.Context, tenantID, comandaID, origemUserID uuid.UUID, detalhes map[string]any) error
 }

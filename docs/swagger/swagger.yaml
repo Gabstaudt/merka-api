@@ -17,6 +17,34 @@ definitions:
       tenantID:
         type: string
     type: object
+  domain.OrderItem:
+    properties:
+      comandaID:
+        type: string
+      id:
+        type: string
+      lancadoEm:
+        type: string
+      lancadoPor:
+        type: string
+      pesoKg:
+        description: usado para itens de peso (peso líquido, já descontada a tara)
+        format: float64
+        type: number
+      productID:
+        type: string
+      quantidade:
+        description: usado para itens unitários
+        format: float64
+        type: number
+      status:
+        $ref: '#/definitions/domain.StatusOrderItem'
+      tenantID:
+        type: string
+      valor:
+        format: float64
+        type: number
+    type: object
   domain.StatusComanda:
     enum:
     - disponivel
@@ -29,10 +57,45 @@ definitions:
     - StatusEmUso
     - StatusPaga
     - StatusCancelada
+  domain.StatusOrderItem:
+    enum:
+    - ativo
+    - removido
+    - estornado
+    type: string
+    x-enum-varnames:
+    - StatusItemAtivo
+    - StatusItemRemovido
+    - StatusItemEstornado
   handler.abrirComandaRequest:
     properties:
       table_id:
         type: string
+    type: object
+  handler.fecharPagamentoRequest:
+    properties:
+      comanda_ids:
+        items:
+          type: string
+        type: array
+      pagamentos:
+        items:
+          $ref: '#/definitions/handler.pagamentoParcialRequest'
+        type: array
+    type: object
+  handler.fecharPagamentoResponse:
+    properties:
+      payment_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  handler.lancarItemRequest:
+    properties:
+      product_id:
+        type: string
+      quantidade:
+        type: number
     type: object
   handler.loginRequest:
     properties:
@@ -44,6 +107,20 @@ definitions:
   handler.loginResponse:
     properties:
       token:
+        type: string
+    type: object
+  handler.pagamentoParcialRequest:
+    properties:
+      metodo:
+        type: string
+      valor:
+        type: number
+    type: object
+  handler.registrarPesoRequest:
+    properties:
+      peso_bruto:
+        type: number
+      product_id:
         type: string
     type: object
 info:
@@ -143,6 +220,171 @@ paths:
       summary: Entregar comanda zerada ao cliente (US-07)
       tags:
       - comandas
+  /comandas/{id}/itens:
+    post:
+      consumes:
+      - application/json
+      description: Garçom lança um item do cardápio (bebida, sobremesa, etc.) na comanda.
+        Se a comanda já não aceitar lançamento (paga/cancelada), o lançamento é rejeitado
+        e um alerta é gravado em sync_alerts para o Gestor (conflito de sincronização).
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Produto e quantidade
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.lancarItemRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.OrderItem'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda ou produto não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda já finalizada — lançamento rejeitado, alerta gravado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Lançar item unitário na comanda (US-11)
+      tags:
+      - comandas
+  /comandas/{id}/pesos:
+    post:
+      consumes:
+      - application/json
+      description: Balança lê o peso bruto do prato; o backend calcula (peso_bruto
+        - tara) * preco_por_kg e lança em order_items. Se a comanda já não aceitar
+        lançamento (paga/cancelada), o lançamento é rejeitado e um alerta é gravado
+        em sync_alerts para o Gestor (conflito de sincronização).
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Produto pesado e peso bruto lido
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.registrarPesoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.OrderItem'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda ou produto não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda já finalizada — lançamento rejeitado, alerta gravado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Registrar peso de item na comanda (US-09)
+      tags:
+      - comandas
+  /pagamentos:
+    post:
+      consumes:
+      - application/json
+      description: Soma o total ativo (itens + pesos, excluindo removidos/estornados)
+        das comandas informadas — que podem ser N comandas de uma mesma mesa — e confere
+        contra a soma dos pagamentos parciais informados (suporta pagamento misto).
+        Se bater, grava um payment por método, liga todas as comandas via payment_comandas
+        e marca as comandas como "paga". Não emite nota fiscal ainda (ver TODO no
+        usecase para US-14/emissão de NFC-e).
+      parameters:
+      - description: Comandas a fechar e pagamentos parciais
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.fecharPagamentoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.fecharPagamentoResponse'
+        "400":
+          description: corpo inválido, método inválido ou soma dos pagamentos não
+            bate com o total
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: alguma comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Fechar pagamento de uma ou mais comandas (US-13 + US-14)
+      tags:
+      - pagamentos
 securityDefinitions:
   BearerAuth:
     description: Informe "Bearer <token>" (token obtido em POST /auth/login)

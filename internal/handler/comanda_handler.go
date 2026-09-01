@@ -6,6 +6,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/merka/api/internal/audit"
+	"github.com/merka/api/internal/domain"
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
@@ -15,13 +17,15 @@ type ComandaHandler struct {
 	abrirComanda  *usecase.AbrirComanda
 	registrarPeso *usecase.RegistrarPeso
 	lancarItem    *usecase.LancarItem
+	auditWriter   *audit.Writer
 }
 
-func NewComandaHandler(abrirComanda *usecase.AbrirComanda, registrarPeso *usecase.RegistrarPeso, lancarItem *usecase.LancarItem) *ComandaHandler {
+func NewComandaHandler(abrirComanda *usecase.AbrirComanda, registrarPeso *usecase.RegistrarPeso, lancarItem *usecase.LancarItem, auditWriter *audit.Writer) *ComandaHandler {
 	return &ComandaHandler{
 		abrirComanda:  abrirComanda,
 		registrarPeso: registrarPeso,
 		lancarItem:    lancarItem,
+		auditWriter:   auditWriter,
 	}
 }
 
@@ -56,9 +60,9 @@ type abrirComandaRequest struct {
 func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 	codigo := c.Params("codigo")
 
-	tenantID, ok := c.Locals(middleware.LocalTenantID).(uuid.UUID)
+	tenantID, userID, ok := identidadeRequisicao(c)
 	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant não identificado — autentique-se novamente"})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
 	}
 
 	var req abrirComandaRequest
@@ -68,7 +72,20 @@ func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 		}
 	}
 
-	comanda, err := h.abrirComanda.Executar(c.UserContext(), tenantID, codigo, req.TableID)
+	dadosAuditoria := map[string]any{
+		"codigo_fisico": codigo,
+		"table_id":      req.TableID,
+	}
+
+	comanda, err := audit.Executar(c.UserContext(), h.auditWriter, "abrir_comanda", tenantID, userID, dadosAuditoria,
+		func() (*domain.Comanda, *uuid.UUID, error) {
+			comanda, err := h.abrirComanda.Executar(c.UserContext(), tenantID, codigo, req.TableID)
+			if comanda == nil {
+				return nil, nil, err
+			}
+			return comanda, &comanda.ID, err
+		},
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, postgres.ErrComandaNaoEncontrada):
@@ -120,7 +137,17 @@ func (h *ComandaHandler) RegistrarPeso(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
 	}
 
-	item, err := h.registrarPeso.Executar(c.UserContext(), tenantID, comandaID, req.ProductID, userID, req.PesoBruto)
+	dadosAuditoria := map[string]any{
+		"product_id": req.ProductID,
+		"peso_bruto": req.PesoBruto,
+	}
+
+	item, err := audit.Executar(c.UserContext(), h.auditWriter, "registrar_peso", tenantID, userID, dadosAuditoria,
+		func() (*domain.OrderItem, *uuid.UUID, error) {
+			item, err := h.registrarPeso.Executar(c.UserContext(), tenantID, comandaID, req.ProductID, userID, req.PesoBruto)
+			return item, &comandaID, err
+		},
+	)
 	if err != nil {
 		return responderErroLancamento(c, err)
 	}
@@ -165,7 +192,17 @@ func (h *ComandaHandler) LancarItem(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
 	}
 
-	item, err := h.lancarItem.Executar(c.UserContext(), tenantID, comandaID, req.ProductID, userID, req.Quantidade)
+	dadosAuditoria := map[string]any{
+		"product_id": req.ProductID,
+		"quantidade": req.Quantidade,
+	}
+
+	item, err := audit.Executar(c.UserContext(), h.auditWriter, "lancar_item", tenantID, userID, dadosAuditoria,
+		func() (*domain.OrderItem, *uuid.UUID, error) {
+			item, err := h.lancarItem.Executar(c.UserContext(), tenantID, comandaID, req.ProductID, userID, req.Quantidade)
+			return item, &comandaID, err
+		},
+	)
 	if err != nil {
 		return responderErroLancamento(c, err)
 	}
@@ -192,7 +229,7 @@ func responderErroLancamento(c *fiber.Ctx, err error) error {
 
 // identidadeRequisicao lê tenant_id e user_id injetados pelo middleware de
 // auth — usado pelas rotas que precisam registrar quem fez o lançamento
-// (lancado_por / origem_user_id de sync_alerts).
+// (lancado_por / origem_user_id de sync_alerts / usuario_id de audit_log).
 func identidadeRequisicao(c *fiber.Ctx) (tenantID, userID uuid.UUID, ok bool) {
 	tenantID, okTenant := c.Locals(middleware.LocalTenantID).(uuid.UUID)
 	userID, okUser := c.Locals(middleware.LocalUserID).(uuid.UUID)

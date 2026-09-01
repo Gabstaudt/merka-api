@@ -38,3 +38,10 @@ func connFromCtx(ctx context.Context, fallback Querier) Querier {
 	}
 	return fallback
 }
+
+// ConnFromContext é a versão exportada de connFromCtx, usada por pacotes
+// fora de repository/postgres (ex: audit/writer.go) que também precisam
+// escrever na mesma conexão da requisição.
+func ConnFromContext(ctx context.Context, fallback Querier) Querier {
+	return connFromCtx(ctx, fallback)
+}

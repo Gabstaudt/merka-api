@@ -12,6 +12,7 @@ import (
 
 	"github.com/merka/api/config"
 	_ "github.com/merka/api/docs/swagger" // gerado por `swag init` — registra o spec no swaggo
+	"github.com/merka/api/internal/audit"
 	"github.com/merka/api/internal/handler"
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
@@ -69,16 +70,17 @@ func main() {
 	orderItemRepo := postgres.NewOrderItemRepository(pool)
 	paymentRepo := postgres.NewPaymentRepository(pool)
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
+	auditWriter := audit.NewWriter(pool)
 
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo)
 
-	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem)
+	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter)
 	comandaHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento)
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter)
 	paymentHandler.RegistrarRotas(protegidas)
 
 	log.Printf("Merka API rodando na porta %s", cfg.Port)

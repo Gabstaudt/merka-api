@@ -6,16 +6,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/merka/api/internal/audit"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 )
 
 type PaymentHandler struct {
 	fecharPagamento *usecase.FecharPagamento
+	auditWriter     *audit.Writer
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento) *PaymentHandler {
-	return &PaymentHandler{fecharPagamento: fecharPagamento}
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer) *PaymentHandler {
+	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter}
 }
 
 // RegistrarRotas conecta as rotas de pagamento no router informado —
@@ -69,7 +71,26 @@ func (h *PaymentHandler) Fechar(c *fiber.Ctx) error {
 		pagamentos = append(pagamentos, usecase.PagamentoParcial{Metodo: p.Metodo, Valor: p.Valor})
 	}
 
-	paymentIDs, err := h.fecharPagamento.Executar(c.UserContext(), tenantID, userID, req.ComandaIDs, pagamentos)
+	dadosAuditoria := map[string]any{
+		"comanda_ids": req.ComandaIDs,
+		"pagamentos":  req.Pagamentos,
+	}
+
+	// audit_log.comanda_id é uma única FK — para um fechamento com várias
+	// comandas (US-13), a lista completa já está em `dados.comanda_ids`;
+	// aqui associamos a primeira só para permitir filtrar auditoria por
+	// comanda também nesse caso.
+	var comandaAuditoria *uuid.UUID
+	if len(req.ComandaIDs) > 0 {
+		comandaAuditoria = &req.ComandaIDs[0]
+	}
+
+	paymentIDs, err := audit.Executar(c.UserContext(), h.auditWriter, "fechar_pagamento", tenantID, userID, dadosAuditoria,
+		func() ([]uuid.UUID, *uuid.UUID, error) {
+			ids, err := h.fecharPagamento.Executar(c.UserContext(), tenantID, userID, req.ComandaIDs, pagamentos)
+			return ids, comandaAuditoria, err
+		},
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, postgres.ErrComandaNaoEncontrada):

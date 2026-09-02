@@ -74,6 +74,33 @@ definitions:
         format: float64
         type: number
     type: object
+  domain.Product:
+    properties:
+      ativo:
+        type: boolean
+      categoryID:
+        type: string
+      id:
+        type: string
+      nome:
+        type: string
+      precoPorKg:
+        description: usado quando TipoCobranca == TipoCobrancaPeso
+        format: float64
+        type: number
+      precoUnitario:
+        description: usado quando TipoCobranca == TipoCobrancaUnitario
+        format: float64
+        type: number
+      taraKg:
+        description: peso do prato/recipiente, descontado do peso bruto lido na balança
+        format: float64
+        type: number
+      tenantID:
+        type: string
+      tipoCobranca:
+        $ref: '#/definitions/domain.TipoCobranca'
+    type: object
   domain.StatusComanda:
     enum:
     - disponivel
@@ -96,6 +123,14 @@ definitions:
     - StatusItemAtivo
     - StatusItemRemovido
     - StatusItemEstornado
+  domain.TipoCobranca:
+    enum:
+    - unitario
+    - peso
+    type: string
+    x-enum-varnames:
+    - TipoCobrancaUnitario
+    - TipoCobrancaPeso
   domain.TipoDesconto:
     enum:
     - valor_fixo
@@ -118,10 +153,32 @@ definitions:
       valor:
         type: number
     type: object
+  handler.cadastrarProdutoRequest:
+    properties:
+      category_id:
+        type: string
+      nome:
+        type: string
+      preco_por_kg:
+        type: number
+      preco_unitario:
+        type: number
+      tara_kg:
+        type: number
+      tipo_cobranca:
+        type: string
+    type: object
   handler.cancelarComandaRequest:
     properties:
       motivo:
         type: string
+    type: object
+  handler.configurarPrecoPesoRequest:
+    properties:
+      preco_por_kg:
+        type: number
+      tara_kg:
+        type: number
     type: object
   handler.fecharPagamentoRequest:
     properties:
@@ -810,6 +867,153 @@ paths:
       summary: Fechar pagamento de uma ou mais comandas (US-13 + US-14)
       tags:
       - pagamentos
+  /produtos:
+    get:
+      description: Qualquer perfil autenticado — usado por garçom/balança pra escolher
+        o que lançar (US-09/US-11).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Product'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar catálogo de produtos ativos
+      tags:
+      - produtos
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super, Gestor ou Caixa (permissão "cadastrar_produto").
+        tipo_cobranca "unitario" exige preco_unitario > 0; tipo_cobranca "peso" exige
+        preco_por_kg > 0 (tara_kg opcional, default 0). Grava a primeira linha em
+        product_price_history para produtos do tipo peso.
+      parameters:
+      - description: Dados do produto
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.cadastrarProdutoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Product'
+        "400":
+          description: campo obrigatório ausente ou tipo_cobranca inválido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cadastrar novo produto no catálogo (US-21)
+      tags:
+      - produtos
+  /produtos/{id}/preco-peso:
+    patch:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super, Gestor, Caixa ou Balança (permissão "configurar_preco_peso")
+        — ajuste operacional do dia a dia, diferente das demais configurações estruturais.
+        Só se aplica a produtos do tipo peso. Grava o histórico da alteração em product_price_history.
+      parameters:
+      - description: ID do produto
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Novo preço/kg e/ou tara (ao menos um)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.configurarPrecoPesoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Product'
+        "400":
+          description: nada para atualizar
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: produto não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: produto não é do tipo peso
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Configurar preço/kg e tara de um produto (US-20)
+      tags:
+      - produtos
 securityDefinitions:
   BearerAuth:
     description: Informe "Bearer <token>" (token obtido em POST /auth/login)

@@ -47,9 +47,28 @@ type UserRepository interface {
 
 // ProductRepository define o contrato de persistência para o catálogo de
 // produtos — usado pelos usecases de lançamento (registrar_peso,
-// lancar_item) para ler preço/tara na hora do cálculo.
+// lancar_item) para ler preço/tara na hora do cálculo, e pelos usecases
+// de catálogo (cadastrar_produto, configurar_preco_peso, listar).
 type ProductRepository interface {
 	BuscarPorID(ctx context.Context, tenantID, productID uuid.UUID) (*domain.Product, error)
+
+	// Criar grava um novo produto no catálogo (US-21).
+	Criar(ctx context.Context, product *domain.Product) error
+
+	// AtualizarPrecoPeso sobrescreve preco_por_kg e tara_kg de um produto
+	// já existente (US-20) — o usecase decide os valores finais (mantendo
+	// igual ao que já estava o que não foi informado na requisição).
+	AtualizarPrecoPeso(ctx context.Context, productID uuid.UUID, precoPorKg, taraKg float64) error
+
+	// ListarAtivos lista o catálogo ativo do tenant — usado por qualquer
+	// perfil operacional (garçom, balança) pra escolher o que lançar.
+	ListarAtivos(ctx context.Context, tenantID uuid.UUID) ([]domain.Product, error)
+}
+
+// ProductPriceHistoryRepository grava o histórico de alteração de
+// preço/kg e tara de produtos do tipo peso (US-20/US-21).
+type ProductPriceHistoryRepository interface {
+	Criar(ctx context.Context, entry *domain.ProductPriceHistory) error
 }
 
 // OrderItemRepository define o contrato de persistência para os itens

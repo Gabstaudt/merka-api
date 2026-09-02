@@ -17,6 +17,7 @@ const (
 type Product struct {
 	ID            uuid.UUID
 	TenantID      uuid.UUID
+	CategoryID    *uuid.UUID
 	Nome          string
 	TipoCobranca  TipoCobranca
 	PrecoUnitario float64 // usado quando TipoCobranca == TipoCobrancaUnitario

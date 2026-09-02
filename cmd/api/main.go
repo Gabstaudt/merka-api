@@ -70,6 +70,7 @@ func main() {
 	fiscalReceiptRepo := postgres.NewFiscalReceiptRepository(pool)
 	permissionRepo := postgres.NewPermissionRepository(pool)
 	discountRepo := postgres.NewDiscountRepository(pool)
+	productPriceHistoryRepo := postgres.NewProductPriceHistoryRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
@@ -103,6 +104,9 @@ func main() {
 	aplicarDesconto := usecase.NewAplicarDesconto(orderItemRepo, discountRepo)
 	estornarPeso := usecase.NewEstornarPeso(orderItemRepo)
 	removerItem := usecase.NewRemoverItem(orderItemRepo)
+	cadastrarProduto := usecase.NewCadastrarProduto(productRepo, productPriceHistoryRepo)
+	configurarPrecoPeso := usecase.NewConfigurarPrecoPeso(productRepo, productPriceHistoryRepo)
+	listarProdutos := usecase.NewListarProdutos(productRepo)
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
@@ -114,6 +118,9 @@ func main() {
 
 	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
 	orderItemHandler.RegistrarRotas(protegidas)
+
+	productHandler := handler.NewProductHandler(cadastrarProduto, configurarPrecoPeso, listarProdutos, auditWriter, permissionRepo)
+	productHandler.RegistrarRotas(protegidas)
 
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)

@@ -929,6 +929,225 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/produtos": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Qualquer perfil autenticado — usado por garçom/balança pra escolher o que lançar (US-09/US-11).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Listar catálogo de produtos ativos",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.Product"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super, Gestor ou Caixa (permissão \"cadastrar_produto\"). tipo_cobranca \"unitario\" exige preco_unitario \u003e 0; tipo_cobranca \"peso\" exige preco_por_kg \u003e 0 (tara_kg opcional, default 0). Grava a primeira linha em product_price_history para produtos do tipo peso.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Cadastrar novo produto no catálogo (US-21)",
+                "parameters": [
+                    {
+                        "description": "Dados do produto",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.cadastrarProdutoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "campo obrigatório ausente ou tipo_cobranca inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/produtos/{id}/preco-peso": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super, Gestor, Caixa ou Balança (permissão \"configurar_preco_peso\") — ajuste operacional do dia a dia, diferente das demais configurações estruturais. Só se aplica a produtos do tipo peso. Grava o histórico da alteração em product_price_history.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Configurar preço/kg e tara de um produto (US-20)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do produto",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo preço/kg e/ou tara (ao menos um)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.configurarPrecoPesoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "nada para atualizar",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "produto não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "produto não é do tipo peso",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1038,6 +1257,44 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.Product": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "categoryID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "precoPorKg": {
+                    "description": "usado quando TipoCobranca == TipoCobrancaPeso",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "precoUnitario": {
+                    "description": "usado quando TipoCobranca == TipoCobrancaUnitario",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "taraKg": {
+                    "description": "peso do prato/recipiente, descontado do peso bruto lido na balança",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipoCobranca": {
+                    "$ref": "#/definitions/domain.TipoCobranca"
+                }
+            }
+        },
         "domain.StatusComanda": {
             "type": "string",
             "enum": [
@@ -1064,6 +1321,17 @@ const docTemplate = `{
                 "StatusItemAtivo",
                 "StatusItemRemovido",
                 "StatusItemEstornado"
+            ]
+        },
+        "domain.TipoCobranca": {
+            "type": "string",
+            "enum": [
+                "unitario",
+                "peso"
+            ],
+            "x-enum-varnames": [
+                "TipoCobrancaUnitario",
+                "TipoCobrancaPeso"
             ]
         },
         "domain.TipoDesconto": {
@@ -1099,11 +1367,45 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.cadastrarProdutoRequest": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "preco_por_kg": {
+                    "type": "number"
+                },
+                "preco_unitario": {
+                    "type": "number"
+                },
+                "tara_kg": {
+                    "type": "number"
+                },
+                "tipo_cobranca": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.cancelarComandaRequest": {
             "type": "object",
             "properties": {
                 "motivo": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.configurarPrecoPesoRequest": {
+            "type": "object",
+            "properties": {
+                "preco_por_kg": {
+                    "type": "number"
+                },
+                "tara_kg": {
+                    "type": "number"
                 }
             }
         },

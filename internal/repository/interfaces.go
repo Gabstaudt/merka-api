@@ -90,3 +90,15 @@ type FiscalReceiptRepository interface {
 	// (US-05) investigar depois.
 	RegistrarFalha(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error
 }
+
+// PermissionRepository define o contrato de checagem de permissão
+// granular (seção 16 do documento de planejamento: "cada usecase declara
+// quais permissões exige; o middleware verifica a partir do token do
+// usuário"). Nunca hardcode `if role == "garcom"` — quem decide é a
+// tabela role_permissions, o que permite perfis customizados sem código
+// novo.
+type PermissionRepository interface {
+	// UsuarioTemPermissao resolve users.role_id -> role_permissions ->
+	// permissions.chave e devolve se o usuário tem a permissão informada.
+	UsuarioTemPermissao(ctx context.Context, userID uuid.UUID, chave domain.Permissao) (bool, error)
+}

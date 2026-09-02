@@ -68,6 +68,7 @@ func main() {
 	paymentRepo := postgres.NewPaymentRepository(pool)
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
 	fiscalReceiptRepo := postgres.NewFiscalReceiptRepository(pool)
+	permissionRepo := postgres.NewPermissionRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
@@ -98,10 +99,10 @@ func main() {
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
-	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub)
+	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub, permissionRepo)
 	comandaHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub)
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)
 
 	// Worker de pendência de 30s (seção 15 do planejamento) — roda em

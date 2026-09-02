@@ -7,6 +7,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/merka/api/internal/audit"
+	"github.com/merka/api/internal/domain"
+	"github.com/merka/api/internal/middleware"
+	"github.com/merka/api/internal/repository"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 	"github.com/merka/api/internal/ws"
@@ -16,16 +19,17 @@ type PaymentHandler struct {
 	fecharPagamento *usecase.FecharPagamento
 	auditWriter     *audit.Writer
 	hub             *ws.Hub
+	permRepo        repository.PermissionRepository
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer, hub *ws.Hub) *PaymentHandler {
-	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter, hub: hub}
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository) *PaymentHandler {
+	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter, hub: hub, permRepo: permRepo}
 }
 
 // RegistrarRotas conecta as rotas de pagamento no router informado —
 // espera-se que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
 func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
-	router.Post("/pagamentos", h.Fechar)
+	router.Post("/pagamentos", middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
 }
 
 type pagamentoParcialRequest struct {

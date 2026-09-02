@@ -9,6 +9,7 @@ import (
 	"github.com/merka/api/internal/audit"
 	"github.com/merka/api/internal/domain"
 	"github.com/merka/api/internal/middleware"
+	"github.com/merka/api/internal/repository"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 	"github.com/merka/api/internal/ws"
@@ -20,24 +21,35 @@ type ComandaHandler struct {
 	lancarItem    *usecase.LancarItem
 	auditWriter   *audit.Writer
 	hub           *ws.Hub
+	permRepo      repository.PermissionRepository
 }
 
-func NewComandaHandler(abrirComanda *usecase.AbrirComanda, registrarPeso *usecase.RegistrarPeso, lancarItem *usecase.LancarItem, auditWriter *audit.Writer, hub *ws.Hub) *ComandaHandler {
+func NewComandaHandler(
+	abrirComanda *usecase.AbrirComanda,
+	registrarPeso *usecase.RegistrarPeso,
+	lancarItem *usecase.LancarItem,
+	auditWriter *audit.Writer,
+	hub *ws.Hub,
+	permRepo repository.PermissionRepository,
+) *ComandaHandler {
 	return &ComandaHandler{
 		abrirComanda:  abrirComanda,
 		registrarPeso: registrarPeso,
 		lancarItem:    lancarItem,
 		auditWriter:   auditWriter,
 		hub:           hub,
+		permRepo:      permRepo,
 	}
 }
 
 // RegistrarRotas conecta as rotas de comanda no router informado — espera-se
-// que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
+// que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go). Cada
+// rota declara sua própria permissão exigida via RequerPermissao — nunca
+// checagem de role hardcoded (seção 16 do documento de planejamento).
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
-	router.Post("/comandas/:codigo/abrir", h.Abrir)
-	router.Post("/comandas/:id/pesos", h.RegistrarPeso)
-	router.Post("/comandas/:id/itens", h.LancarItem)
+	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
+	router.Post("/comandas/:id/pesos", middleware.RequerPermissao(h.permRepo, domain.PermissaoRegistrarPeso), h.RegistrarPeso)
+	router.Post("/comandas/:id/itens", middleware.RequerPermissao(h.permRepo, domain.PermissaoLancarItem), h.LancarItem)
 }
 
 // abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.

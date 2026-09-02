@@ -162,6 +162,22 @@ type FiscalReceiptRepository interface {
 	// emitida=false, nunca é silenciada: fica visível para Admin/Gestor
 	// (US-05) investigar depois.
 	RegistrarFalha(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error
+
+	// Listar busca fiscal_receipts do tenant com os filtros informados —
+	// usado por GET /notas-fiscais (US-05). fiscal_receipts não tem
+	// coluna de criado_em própria, então o filtro de período usa
+	// payments.processado_em (via join) — ver domain.FiscalReceipt.
+	Listar(ctx context.Context, tenantID uuid.UUID, filtro FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error)
+}
+
+// FiscalReceiptFiltro são os filtros aceitos por FiscalReceiptRepository.Listar
+// — todos opcionais exceto Limit/Offset (paginação simples).
+type FiscalReceiptFiltro struct {
+	DataInicio *time.Time
+	DataFim    *time.Time
+	Emitida    *bool
+	Limit      int
+	Offset     int
 }
 
 // PermissionRepository define o contrato de checagem de permissão
@@ -193,4 +209,45 @@ type PermissionRepository interface {
 // em si já é auditado via audit_log e via esta própria tabela).
 type DiscountRepository interface {
 	Criar(ctx context.Context, discount *domain.Discount) error
+}
+
+// AuditLogRepository define o contrato de consulta ao log de auditoria
+// (US-03 — GET /auditoria). Só leitura: a gravação é feita pelo
+// audit.Writer (internal/audit/writer.go), que já tem acesso direto ao
+// pool — esta interface existe só para o usecase de consulta, para não
+// acoplar o usecase ao pacote internal/audit.
+type AuditLogRepository interface {
+	// Listar busca entradas do audit_log do tenant com os filtros
+	// informados, devolvendo também o total de linhas que casam com o
+	// filtro (sem paginação) — para o cliente montar "página X de Y".
+	Listar(ctx context.Context, tenantID uuid.UUID, filtro AuditLogFiltro) ([]domain.AuditLogEntry, int, error)
+}
+
+// AuditLogFiltro são os filtros aceitos por AuditLogRepository.Listar —
+// todos opcionais exceto Limit/Offset. Paginação simples via
+// limit/offset (não cursor): a lista de auditoria é ordenada por
+// criado_em DESC e o volume por tenant não justifica a complexidade
+// adicional de um cursor opaco nesta etapa.
+type AuditLogFiltro struct {
+	UsuarioID  *uuid.UUID
+	Acao       *string
+	ComandaID  *uuid.UUID
+	DataInicio *time.Time
+	DataFim    *time.Time
+	Limit      int
+	Offset     int
+}
+
+// RelatorioRepository define as consultas agregadas usadas por GET
+// /relatorios/vendas (US-04).
+type RelatorioRepository interface {
+	// SomarPorFormaPagamento soma payments.valor agrupado por metodo,
+	// para payments.processado_em dentro de [inicio, fim).
+	SomarPorFormaPagamento(ctx context.Context, tenantID uuid.UUID, inicio, fim time.Time) ([]domain.VendaPorFormaPagamento, error)
+
+	// SomarPorProduto soma order_items.valor agrupado por produto (com
+	// categoria resolvida via join), excluindo status
+	// removido/estornado, para order_items.lancado_em dentro de
+	// [inicio, fim).
+	SomarPorProduto(ctx context.Context, tenantID uuid.UUID, inicio, fim time.Time) ([]domain.VendaPorProduto, error)
 }

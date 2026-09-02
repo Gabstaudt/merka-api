@@ -72,6 +72,8 @@ func main() {
 	discountRepo := postgres.NewDiscountRepository(pool)
 	productPriceHistoryRepo := postgres.NewProductPriceHistoryRepository(pool)
 	roleRepo := postgres.NewRoleRepository(pool)
+	auditLogRepo := postgres.NewAuditLogRepository(pool)
+	relatorioRepo := postgres.NewRelatorioRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
@@ -114,6 +116,9 @@ func main() {
 	editarPermissoesPerfil := usecase.NewEditarPermissoesPerfil(roleRepo, permissionRepo)
 	listarPerfis := usecase.NewListarPerfis(roleRepo)
 	listarPermissoes := usecase.NewListarPermissoes(permissionRepo)
+	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
+	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
+	consultarNotasFiscais := usecase.NewConsultarNotasFiscais(fiscalReceiptRepo)
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
@@ -137,6 +142,12 @@ func main() {
 
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)
+
+	auditLogHandler := handler.NewAuditLogHandler(consultarAuditoria, permissionRepo)
+	auditLogHandler.RegistrarRotas(protegidas)
+
+	reportHandler := handler.NewReportHandler(gerarRelatorioVendas, consultarNotasFiscais, permissionRepo)
+	reportHandler.RegistrarRotas(protegidas)
 
 	// Worker de pendência de 30s (seção 15 do planejamento) — roda em
 	// background pela vida inteira do processo; ver TODO em

@@ -1,5 +1,25 @@
 basePath: /
 definitions:
+  domain.AuditLogEntry:
+    properties:
+      acao:
+        type: string
+      comandaID:
+        type: string
+      criadoEm:
+        type: string
+      dados:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+      sucesso:
+        type: boolean
+      tenantID:
+        type: string
+      usuarioID:
+        type: string
+    type: object
   domain.Comanda:
     properties:
       abertaEm:
@@ -36,6 +56,45 @@ definitions:
       valor:
         format: float64
         type: number
+    type: object
+  domain.FiscalReceipt:
+    properties:
+      chaveAcesso:
+        type: string
+      documento:
+        type: string
+      emailDestino:
+        type: string
+      emailEnviado:
+        type: boolean
+      emitida:
+        type: boolean
+      emitidaEm:
+        type: string
+      id:
+        type: string
+      impressa:
+        type: boolean
+      linkDanfe:
+        type: string
+      motivoFalha:
+        type: string
+      numeroNota:
+        type: string
+      paymentID:
+        type: string
+      pdfgerado:
+        type: boolean
+      processadoEm:
+        type: string
+      tenantID:
+        type: string
+      tipoDocumento:
+        type: string
+      whatsappDestino:
+        type: string
+      whatsappEnviado:
+        type: boolean
     type: object
   domain.OrderItem:
     properties:
@@ -146,6 +205,28 @@ definitions:
       tipoCobranca:
         $ref: '#/definitions/domain.TipoCobranca'
     type: object
+  domain.RelatorioVendas:
+    properties:
+      fim:
+        description: RFC3339 — fim do período (exclusive)
+        type: string
+      inicio:
+        description: RFC3339 — início do período (inclusive)
+        type: string
+      periodo:
+        type: string
+      porFormaPagamento:
+        items:
+          $ref: '#/definitions/domain.VendaPorFormaPagamento'
+        type: array
+      porProduto:
+        items:
+          $ref: '#/definitions/domain.VendaPorProduto'
+        type: array
+      totalGeral:
+        format: float64
+        type: number
+    type: object
   domain.Role:
     properties:
       id:
@@ -195,6 +276,28 @@ definitions:
     x-enum-varnames:
     - DescontoValorFixo
     - DescontoPercentual
+  domain.VendaPorFormaPagamento:
+    properties:
+      metodo:
+        type: string
+      total:
+        format: float64
+        type: number
+    type: object
+  domain.VendaPorProduto:
+    properties:
+      categoriaNome:
+        type: string
+      categoryID:
+        type: string
+      productID:
+        type: string
+      produtoNome:
+        type: string
+      total:
+        format: float64
+        type: number
+    type: object
   handler.abrirComandaRequest:
     properties:
       table_id:
@@ -208,6 +311,19 @@ definitions:
         type: string
       valor:
         type: number
+    type: object
+  handler.auditoriaResponse:
+    properties:
+      itens:
+        items:
+          $ref: '#/definitions/domain.AuditLogEntry'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
     type: object
   handler.cadastrarProdutoRequest:
     properties:
@@ -305,6 +421,19 @@ definitions:
       motivo:
         type: string
     type: object
+  handler.notasFiscaisResponse:
+    properties:
+      itens:
+        items:
+          $ref: '#/definitions/domain.FiscalReceipt'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
   handler.pagamentoParcialRequest:
     properties:
       metodo:
@@ -344,6 +473,77 @@ info:
   title: Merka API
   version: "1.0"
 paths:
+  /auditoria:
+    get:
+      description: 'Restrito a Admin Super ou Gestor (permissão "ver_auditoria").
+        Filtros opcionais via querystring: usuario_id, acao, comanda_id, data_inicio,
+        data_fim (RFC3339 ou "AAAA-MM-DD"). Paginação simples via limit (padrão 50,
+        máx 200) e offset.'
+      parameters:
+      - description: Filtrar por usuário
+        in: query
+        name: usuario_id
+        type: string
+      - description: 'Filtrar por ação (ex: lancar_item, cancelar_comanda)'
+        in: query
+        name: acao
+        type: string
+      - description: Filtrar por comanda
+        in: query
+        name: comanda_id
+        type: string
+      - description: Data/hora inicial (RFC3339 ou AAAA-MM-DD)
+        in: query
+        name: data_inicio
+        type: string
+      - description: Data/hora final (RFC3339 ou AAAA-MM-DD)
+        in: query
+        name: data_fim
+        type: string
+      - description: Itens por página (padrão 50, máx 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Deslocamento da página (padrão 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.auditoriaResponse'
+        "400":
+          description: parâmetro inválido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Consultar log de auditoria (US-03)
+      tags:
+      - auditoria
   /auth/login:
     post:
       consumes:
@@ -775,6 +975,68 @@ paths:
       summary: Registrar peso de item na comanda (US-09)
       tags:
       - comandas
+  /notas-fiscais:
+    get:
+      description: 'Restrito a Admin Super ou Gestor (permissão "ver_relatorios").
+        Filtros opcionais: data_inicio, data_fim (referem-se a payments.processado_em)
+        e emitida (true/false). Paginação simples via limit/offset.'
+      parameters:
+      - description: Data/hora inicial (RFC3339 ou AAAA-MM-DD)
+        in: query
+        name: data_inicio
+        type: string
+      - description: Data/hora final (RFC3339 ou AAAA-MM-DD)
+        in: query
+        name: data_fim
+        type: string
+      - description: Filtrar por status de emissão
+        in: query
+        name: emitida
+        type: boolean
+      - description: Itens por página (padrão 50, máx 200)
+        in: query
+        name: limit
+        type: integer
+      - description: Deslocamento da página (padrão 0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.notasFiscaisResponse'
+        "400":
+          description: parâmetro inválido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar notas/cupons fiscais (US-05)
+      tags:
+      - relatorios
   /order-items/{id}/estornar:
     patch:
       consumes:
@@ -1304,6 +1566,58 @@ paths:
       summary: Configurar preço/kg e tara de um produto (US-20)
       tags:
       - produtos
+  /relatorios/vendas:
+    get:
+      description: Restrito a Admin Super ou Gestor (permissão "ver_relatorios").
+        Total vendido segmentado por forma de pagamento (payments dentro do período)
+        e por produto/categoria (order_items ativos dentro do período).
+      parameters:
+      - description: dia | semana | mes | ano
+        in: query
+        name: periodo
+        required: true
+        type: string
+      - description: Data de referência do período (AAAA-MM-DD ou RFC3339)
+        in: query
+        name: data_referencia
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.RelatorioVendas'
+        "400":
+          description: periodo ou data_referencia inválidos
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Relatório de vendas por período (US-04)
+      tags:
+      - relatorios
   /usuarios:
     post:
       consumes:

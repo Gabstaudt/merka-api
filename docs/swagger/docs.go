@@ -15,6 +15,111 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auditoria": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_auditoria\"). Filtros opcionais via querystring: usuario_id, acao, comanda_id, data_inicio, data_fim (RFC3339 ou \"AAAA-MM-DD\"). Paginação simples via limit (padrão 50, máx 200) e offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auditoria"
+                ],
+                "summary": "Consultar log de auditoria (US-03)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filtrar por usuário",
+                        "name": "usuario_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filtrar por ação (ex: lancar_item, cancelar_comanda)",
+                        "name": "acao",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filtrar por comanda",
+                        "name": "comanda_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora inicial (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_inicio",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora final (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_fim",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Itens por página (padrão 50, máx 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Deslocamento da página (padrão 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.auditoriaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "parâmetro inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "description": "Valida login/senha e devolve um JWT contendo user_id, tenant_id e role_id, usado nas demais rotas via header Authorization: Bearer \u003ctoken\u003e.",
@@ -636,6 +741,99 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notas-fiscais": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_relatorios\"). Filtros opcionais: data_inicio, data_fim (referem-se a payments.processado_em) e emitida (true/false). Paginação simples via limit/offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relatorios"
+                ],
+                "summary": "Listar notas/cupons fiscais (US-05)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Data/hora inicial (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_inicio",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora final (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_fim",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filtrar por status de emissão",
+                        "name": "emitida",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Itens por página (padrão 50, máx 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Deslocamento da página (padrão 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.notasFiscaisResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "parâmetro inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1441,6 +1639,83 @@ const docTemplate = `{
                 }
             }
         },
+        "/relatorios/vendas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_relatorios\"). Total vendido segmentado por forma de pagamento (payments dentro do período) e por produto/categoria (order_items ativos dentro do período).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relatorios"
+                ],
+                "summary": "Relatório de vendas por período (US-04)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "dia | semana | mes | ano",
+                        "name": "periodo",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data de referência do período (AAAA-MM-DD ou RFC3339)",
+                        "name": "data_referencia",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.RelatorioVendas"
+                        }
+                    },
+                    "400": {
+                        "description": "periodo ou data_referencia inválidos",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/usuarios": {
             "post": {
                 "security": [
@@ -1600,6 +1875,36 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "domain.AuditLogEntry": {
+            "type": "object",
+            "properties": {
+                "acao": {
+                    "type": "string"
+                },
+                "comandaID": {
+                    "type": "string"
+                },
+                "criadoEm": {
+                    "type": "string"
+                },
+                "dados": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                },
+                "sucesso": {
+                    "type": "boolean"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "usuarioID": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Comanda": {
             "type": "object",
             "properties": {
@@ -1653,6 +1958,65 @@ const docTemplate = `{
                 "valor": {
                     "type": "number",
                     "format": "float64"
+                }
+            }
+        },
+        "domain.FiscalReceipt": {
+            "type": "object",
+            "properties": {
+                "chaveAcesso": {
+                    "type": "string"
+                },
+                "documento": {
+                    "type": "string"
+                },
+                "emailDestino": {
+                    "type": "string"
+                },
+                "emailEnviado": {
+                    "type": "boolean"
+                },
+                "emitida": {
+                    "type": "boolean"
+                },
+                "emitidaEm": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "impressa": {
+                    "type": "boolean"
+                },
+                "linkDanfe": {
+                    "type": "string"
+                },
+                "motivoFalha": {
+                    "type": "string"
+                },
+                "numeroNota": {
+                    "type": "string"
+                },
+                "paymentID": {
+                    "type": "string"
+                },
+                "pdfgerado": {
+                    "type": "boolean"
+                },
+                "processadoEm": {
+                    "type": "string"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipoDocumento": {
+                    "type": "string"
+                },
+                "whatsappDestino": {
+                    "type": "string"
+                },
+                "whatsappEnviado": {
+                    "type": "boolean"
                 }
             }
         },
@@ -1797,6 +2161,38 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.RelatorioVendas": {
+            "type": "object",
+            "properties": {
+                "fim": {
+                    "description": "RFC3339 — fim do período (exclusive)",
+                    "type": "string"
+                },
+                "inicio": {
+                    "description": "RFC3339 — início do período (inclusive)",
+                    "type": "string"
+                },
+                "periodo": {
+                    "type": "string"
+                },
+                "porFormaPagamento": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.VendaPorFormaPagamento"
+                    }
+                },
+                "porProduto": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.VendaPorProduto"
+                    }
+                },
+                "totalGeral": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
         "domain.Role": {
             "type": "object",
             "properties": {
@@ -1864,6 +2260,39 @@ const docTemplate = `{
                 "DescontoPercentual"
             ]
         },
+        "domain.VendaPorFormaPagamento": {
+            "type": "object",
+            "properties": {
+                "metodo": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "domain.VendaPorProduto": {
+            "type": "object",
+            "properties": {
+                "categoriaNome": {
+                    "type": "string"
+                },
+                "categoryID": {
+                    "type": "string"
+                },
+                "productID": {
+                    "type": "string"
+                },
+                "produtoNome": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
         "handler.abrirComandaRequest": {
             "type": "object",
             "properties": {
@@ -1883,6 +2312,26 @@ const docTemplate = `{
                 },
                 "valor": {
                     "type": "number"
+                }
+            }
+        },
+        "handler.auditoriaResponse": {
+            "type": "object",
+            "properties": {
+                "itens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.AuditLogEntry"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -2033,6 +2482,26 @@ const docTemplate = `{
             "properties": {
                 "motivo": {
                     "type": "string"
+                }
+            }
+        },
+        "handler.notasFiscaisResponse": {
+            "type": "object",
+            "properties": {
+                "itens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.FiscalReceipt"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

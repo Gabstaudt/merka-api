@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/merka/api/internal/domain"
 	"github.com/merka/api/internal/repository"
 )
 
@@ -46,4 +47,70 @@ func (r *fiscalReceiptRepository) RegistrarFalha(ctx context.Context, tenantID, 
 	}
 
 	return nil
+}
+
+// Listar busca fiscal_receipts do tenant com os filtros informados
+// (US-05). O período filtra por payments.processado_em (via join) —
+// fiscal_receipts não tem coluna de criado_em própria, e emitida_em é
+// NULL nas tentativas que falharam, então não serviria como filtro
+// universal de período.
+func (r *fiscalReceiptRepository) Listar(ctx context.Context, tenantID uuid.UUID, filtro repository.FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error) {
+	query := `
+		SELECT fr.id, fr.tenant_id, fr.payment_id, fr.tipo_documento, fr.documento,
+		       fr.emitida, fr.emitida_em, fr.impressa, fr.pdf_gerado,
+		       fr.email_enviado, fr.email_destino, fr.whatsapp_enviado, fr.whatsapp_destino,
+		       fr.chave_acesso, fr.numero_nota, fr.link_danfe, fr.motivo_falha,
+		       p.processado_em, count(*) OVER() AS total
+		FROM fiscal_receipts fr
+		JOIN payments p ON p.id = fr.payment_id
+		WHERE fr.tenant_id = $1
+	`
+	args := []any{tenantID}
+
+	if filtro.DataInicio != nil {
+		args = append(args, *filtro.DataInicio)
+		query += fmt.Sprintf(" AND p.processado_em >= $%d", len(args))
+	}
+	if filtro.DataFim != nil {
+		args = append(args, *filtro.DataFim)
+		query += fmt.Sprintf(" AND p.processado_em <= $%d", len(args))
+	}
+	if filtro.Emitida != nil {
+		args = append(args, *filtro.Emitida)
+		query += fmt.Sprintf(" AND fr.emitida = $%d", len(args))
+	}
+
+	args = append(args, filtro.Limit)
+	query += fmt.Sprintf(" ORDER BY p.processado_em DESC LIMIT $%d", len(args))
+	args = append(args, filtro.Offset)
+	query += fmt.Sprintf(" OFFSET $%d", len(args))
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listar fiscal_receipts: %w", err)
+	}
+	defer rows.Close()
+
+	var recibos []domain.FiscalReceipt
+	total := 0
+	for rows.Next() {
+		var f domain.FiscalReceipt
+		if err := rows.Scan(
+			&f.ID, &f.TenantID, &f.PaymentID, &f.TipoDocumento, &f.Documento,
+			&f.Emitida, &f.EmitidaEm, &f.Impressa, &f.PDFGerado,
+			&f.EmailEnviado, &f.EmailDestino, &f.WhatsappEnviado, &f.WhatsappDestino,
+			&f.ChaveAcesso, &f.NumeroNota, &f.LinkDanfe, &f.MotivoFalha,
+			&f.ProcessadoEm, &total,
+		); err != nil {
+			return nil, 0, fmt.Errorf("ler linha de fiscal_receipt: %w", err)
+		}
+		recibos = append(recibos, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterar fiscal_receipts: %w", err)
+	}
+
+	return recibos, total, nil
 }

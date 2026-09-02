@@ -13,6 +13,7 @@ import (
 	"github.com/merka/api/config"
 	_ "github.com/merka/api/docs/swagger" // gerado por `swag init` — registra o spec no swaggo
 	"github.com/merka/api/internal/audit"
+	"github.com/merka/api/internal/fiscal"
 	"github.com/merka/api/internal/handler"
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository/postgres"
@@ -66,8 +67,14 @@ func main() {
 	orderItemRepo := postgres.NewOrderItemRepository(pool)
 	paymentRepo := postgres.NewPaymentRepository(pool)
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
+	fiscalReceiptRepo := postgres.NewFiscalReceiptRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
+
+	// Provider mock: simula emissão de NFC-e com sucesso, sem depender de
+	// credenciais reais de integradora ainda (ver internal/fiscal/mock_provider.go
+	// para o exemplo comentado de como plugar a Focus NFe de verdade).
+	fiscalProvider := fiscal.NewMockProvider()
 
 	// GET /ws precisa ser registrado ANTES do app.Group("/", ...) abaixo:
 	// um Group com prefixo "/" vira middleware casando com qualquer rota
@@ -88,7 +95,8 @@ func main() {
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo)
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
 	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub)
 	comandaHandler.RegistrarRotas(protegidas)

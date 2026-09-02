@@ -46,20 +46,23 @@ type PagamentoParcial struct {
 // o total, grava um payment por método (ligado a todas as comandas via
 // payment_comandas) e marca as comandas como pagas.
 type FecharPagamento struct {
-	comandaRepo   repository.ComandaRepository
-	orderItemRepo repository.OrderItemRepository
-	paymentRepo   repository.PaymentRepository
+	comandaRepo      repository.ComandaRepository
+	orderItemRepo    repository.OrderItemRepository
+	paymentRepo      repository.PaymentRepository
+	emitirNotaFiscal *EmitirNotaFiscal
 }
 
 func NewFecharPagamento(
 	comandaRepo repository.ComandaRepository,
 	orderItemRepo repository.OrderItemRepository,
 	paymentRepo repository.PaymentRepository,
+	emitirNotaFiscal *EmitirNotaFiscal,
 ) *FecharPagamento {
 	return &FecharPagamento{
-		comandaRepo:   comandaRepo,
-		orderItemRepo: orderItemRepo,
-		paymentRepo:   paymentRepo,
+		comandaRepo:      comandaRepo,
+		orderItemRepo:    orderItemRepo,
+		paymentRepo:      paymentRepo,
+		emitirNotaFiscal: emitirNotaFiscal,
 	}
 }
 
@@ -108,11 +111,17 @@ func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor
 		}
 		paymentIDs = append(paymentIDs, id)
 
-		// TODO(US-14, seção 20 do planejamento): quando p.Metodo for
-		// cartão (credito/debito/voucher), chamar aqui a integradora
-		// fiscal (Focus NFe/eNotas) para emitir a NFC-e automaticamente e
-		// gravar o resultado em fiscal_receipts. dinheiro/ticket_alimentacao
-		// não emitem automaticamente — só se explicitamente solicitado.
+		// US-14: cartão (credito/debito/voucher) emite NFC-e
+		// automaticamente; dinheiro/ticket_alimentacao não emitem
+		// automaticamente (só se solicitado explicitamente — fora do
+		// escopo desta etapa). Executar() nunca devolve erro de propósito:
+		// uma falha na integradora fiscal não pode desfazer nem travar um
+		// pagamento já confirmado (ver doc do usecase para o racional
+		// completo). "documento" (CPF/CNPJ) ainda não é capturado no
+		// fechamento — fica vazio até a tela de caixa expor esse campo.
+		if DeveEmitirAutomaticamente(p.Metodo) {
+			uc.emitirNotaFiscal.Executar(ctx, tenantID, id, p.Metodo, p.Valor, "")
+		}
 	}
 
 	for _, comandaID := range comandaIDs {

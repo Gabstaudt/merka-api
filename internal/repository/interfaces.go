@@ -27,6 +27,16 @@ type ComandaRepository interface {
 	// Porteiro (US-07): seta status, mesa associada (opcional) e o
 	// timestamp de abertura.
 	AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error
+
+	// LiberarParaReuso reseta a comanda pro estoque (US-08/US-15): status
+	// volta a 'disponivel', mesa/abertura são limpas e fechada_em registra
+	// o fim do ciclo (a próxima AbrirComanda zera fechada_em de novo).
+	LiberarParaReuso(ctx context.Context, comandaID uuid.UUID) error
+
+	// AtualizarMesa troca a mesa associada a uma comanda (US-16) sem
+	// mexer em nenhum outro campo — os itens/pesos já lançados continuam
+	// intactos, ligados à mesma comanda.
+	AtualizarMesa(ctx context.Context, comandaID, tableID uuid.UUID) error
 }
 
 // UserRepository define o contrato de persistência para usuários —
@@ -50,8 +60,23 @@ type OrderItemRepository interface {
 	// SomarTotalAtivo soma o valor de todos os order_items com status
 	// 'ativo' das comandas informadas (itens removidos/estornados não
 	// entram na conta) — usado pelo fechamento de pagamento (US-13/US-14)
-	// para validar que a soma dos pagamentos parciais bate com o total.
+	// e pelo cálculo de desconto (US-17) para saber o total atual.
 	SomarTotalAtivo(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error)
+
+	// BuscarPorID busca um order_item pelo id (rotas de estorno/remoção
+	// recebem o id do item no path, não o id da comanda).
+	BuscarPorID(ctx context.Context, tenantID, itemID uuid.UUID) (*domain.OrderItem, error)
+
+	// MarcarStatus muda o status de um item pra 'removido' ou 'estornado'
+	// (US-10/US-12) — nunca DELETE físico. Só aplica se o item ainda
+	// estiver 'ativo' (a query filtra por isso), o que evita
+	// remover/estornar duas vezes o mesmo lançamento.
+	MarcarStatus(ctx context.Context, itemID uuid.UUID, novoStatus domain.StatusOrderItem, removidoPor uuid.UUID, motivo string) error
+
+	// RemoverTodosAtivosDaComanda marca todos os order_items ainda
+	// 'ativo' de uma comanda como 'removido' de uma vez — usado pelo
+	// cancelamento total (US-15: "zera todos os itens/pesos lançados").
+	RemoverTodosAtivosDaComanda(ctx context.Context, comandaID, removidoPor uuid.UUID, motivo string) error
 }
 
 // PaymentRepository define o contrato de persistência para pagamentos —
@@ -101,4 +126,11 @@ type PermissionRepository interface {
 	// UsuarioTemPermissao resolve users.role_id -> role_permissions ->
 	// permissions.chave e devolve se o usuário tem a permissão informada.
 	UsuarioTemPermissao(ctx context.Context, userID uuid.UUID, chave domain.Permissao) (bool, error)
+}
+
+// DiscountRepository define o contrato de persistência para descontos
+// manuais (US-17) — só grava; nunca é editado/removido depois (o desconto
+// em si já é auditado via audit_log e via esta própria tabela).
+type DiscountRepository interface {
+	Criar(ctx context.Context, discount *domain.Discount) error
 }

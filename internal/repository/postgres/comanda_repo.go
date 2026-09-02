@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/merka/api/internal/domain"
@@ -17,6 +18,13 @@ import (
 // ErrComandaNaoEncontrada é retornado quando não existe comanda com o
 // código físico informado para o tenant.
 var ErrComandaNaoEncontrada = errors.New("comanda não encontrada")
+
+// ErrMesaNaoEncontrada é retornado por AtualizarMesa quando o table_id
+// informado não existe (violação da FK comandas.table_id -> tables.id).
+var ErrMesaNaoEncontrada = errors.New("mesa não encontrada")
+
+// codigoViolacaoFK é o SQLSTATE do Postgres para foreign_key_violation.
+const codigoViolacaoFK = "23503"
 
 type comandaRepository struct {
 	pool *pgxpool.Pool
@@ -99,6 +107,44 @@ func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUI
 	tag, err := db.Exec(ctx, query, domain.StatusEmUso, tableID, abertaEm, comandaID)
 	if err != nil {
 		return fmt.Errorf("abrir comanda: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrComandaNaoEncontrada
+	}
+
+	return nil
+}
+
+func (r *comandaRepository) LiberarParaReuso(ctx context.Context, comandaID uuid.UUID) error {
+	const query = `
+		UPDATE comandas
+		SET status = $1, table_id = NULL, aberta_em = NULL, fechada_em = now()
+		WHERE id = $2
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, domain.StatusDisponivel, comandaID)
+	if err != nil {
+		return fmt.Errorf("liberar comanda para reuso: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrComandaNaoEncontrada
+	}
+
+	return nil
+}
+
+func (r *comandaRepository) AtualizarMesa(ctx context.Context, comandaID, tableID uuid.UUID) error {
+	const query = `UPDATE comandas SET table_id = $1 WHERE id = $2`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, tableID, comandaID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == codigoViolacaoFK {
+			return ErrMesaNaoEncontrada
+		}
+		return fmt.Errorf("atualizar mesa da comanda: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrComandaNaoEncontrada

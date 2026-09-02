@@ -50,3 +50,9 @@ func (c *Comanda) PodeSerLiberada() bool {
 func (c *Comanda) AceitaLancamento() bool {
 	return c.Status == StatusEmUso
 }
+
+// PodeSerCancelada valida a regra da US-15: só é possível cancelar uma
+// comanda em atendimento ativo (em_uso) — ainda não paga.
+func (c *Comanda) PodeSerCancelada() bool {
+	return c.Status == StatusEmUso
+}

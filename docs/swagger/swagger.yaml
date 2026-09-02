@@ -17,6 +17,26 @@ definitions:
       tenantID:
         type: string
     type: object
+  domain.Discount:
+    properties:
+      aplicadoEm:
+        type: string
+      aplicadoPor:
+        type: string
+      comandaID:
+        type: string
+      id:
+        type: string
+      motivo:
+        type: string
+      tenantID:
+        type: string
+      tipo:
+        $ref: '#/definitions/domain.TipoDesconto'
+      valor:
+        format: float64
+        type: number
+    type: object
   domain.OrderItem:
     properties:
       comandaID:
@@ -26,6 +46,8 @@ definitions:
       lancadoEm:
         type: string
       lancadoPor:
+        type: string
+      motivoRemocao:
         type: string
       pesoKg:
         description: usado para itens de peso (peso líquido, já descontada a tara)
@@ -37,6 +59,13 @@ definitions:
         description: usado para itens unitários
         format: float64
         type: number
+      removidoEm:
+        type: string
+      removidoPor:
+        description: |-
+          Preenchidos só quando Status != ativo (US-10/US-12) — o lançamento
+          original nunca é apagado, só marcado.
+        type: string
       status:
         $ref: '#/definitions/domain.StatusOrderItem'
       tenantID:
@@ -67,9 +96,31 @@ definitions:
     - StatusItemAtivo
     - StatusItemRemovido
     - StatusItemEstornado
+  domain.TipoDesconto:
+    enum:
+    - valor_fixo
+    - percentual
+    type: string
+    x-enum-varnames:
+    - DescontoValorFixo
+    - DescontoPercentual
   handler.abrirComandaRequest:
     properties:
       table_id:
+        type: string
+    type: object
+  handler.aplicarDescontoRequest:
+    properties:
+      motivo:
+        type: string
+      tipo:
+        type: string
+      valor:
+        type: number
+    type: object
+  handler.cancelarComandaRequest:
+    properties:
+      motivo:
         type: string
     type: object
   handler.fecharPagamentoRequest:
@@ -109,6 +160,11 @@ definitions:
       token:
         type: string
     type: object
+  handler.motivoRequest:
+    properties:
+      motivo:
+        type: string
+    type: object
   handler.pagamentoParcialRequest:
     properties:
       metodo:
@@ -121,6 +177,11 @@ definitions:
       peso_bruto:
         type: number
       product_id:
+        type: string
+    type: object
+  handler.transferirMesaRequest:
+    properties:
+      table_id:
         type: string
     type: object
 info:
@@ -220,6 +281,181 @@ paths:
       summary: Entregar comanda zerada ao cliente (US-07)
       tags:
       - comandas
+  /comandas/{codigo}/liberar:
+    post:
+      description: Porteiro escaneia a comanda na saída; se estiver paga (sem saldo
+        devedor), o sistema libera de volta pro estoque (status volta a "disponivel").
+        Se ainda tiver saldo pendente, bloqueia com erro claro.
+      parameters:
+      - description: Código físico da comanda
+        in: path
+        name: codigo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comanda'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda ainda não foi paga
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Receber comanda na saída e validar zeramento (US-08)
+      tags:
+      - comandas
+  /comandas/{id}/cancelar:
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Gestor/Admin Super (permissão "cancelar_comanda"). Zera
+        todos os itens/pesos lançados (marcados como removidos, nunca apagados), marca
+        a comanda como cancelada e a libera de volta pro estoque. Exige motivo.
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Motivo do cancelamento
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.cancelarComandaRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comanda'
+        "400":
+          description: motivo obrigatório
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda não está em uso
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancelar comanda totalmente (US-15)
+      tags:
+      - comandas
+  /comandas/{id}/desconto:
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Gestor, Admin Super ou Caixa (permissão "aplicar_desconto").
+        Tipo "valor_fixo" ou "percentual", sempre com motivo — bloqueia se o desconto
+        resultar em total negativo.
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Tipo, valor e motivo do desconto
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.aplicarDescontoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Discount'
+        "400":
+          description: motivo obrigatório ou tipo inválido
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: desconto resultaria em valor negativo
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Aplicar desconto manual (US-17)
+      tags:
+      - comandas
   /comandas/{id}/itens:
     post:
       consumes:
@@ -273,6 +509,61 @@ paths:
       security:
       - BearerAuth: []
       summary: Lançar item unitário na comanda (US-11)
+      tags:
+      - comandas
+  /comandas/{id}/mesa:
+    patch:
+      consumes:
+      - application/json
+      description: Permitida a qualquer perfil autenticado (sem checagem de permissão
+        granular, por decisão do planejamento) — mantém todos os itens/pesos já lançados
+        intactos.
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Nova mesa
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.transferirMesaRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comanda'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda ou mesa não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda não está em uso
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Transferir comanda entre mesas (US-16)
       tags:
       - comandas
   /comandas/{id}/pesos:
@@ -331,6 +622,140 @@ paths:
       summary: Registrar peso de item na comanda (US-09)
       tags:
       - comandas
+  /order-items/{id}/estornar:
+    patch:
+      consumes:
+      - application/json
+      description: 'Operador de Balança remove um lançamento de peso já feito (ex:
+        cliente foi e voltou pra repetir). O registro original é preservado — muda
+        só o status pra "estornado". Exige motivo.'
+      parameters:
+      - description: ID do order_item
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Motivo do estorno
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.motivoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.OrderItem'
+        "400":
+          description: motivo obrigatório
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: item não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: item já foi removido ou estornado anteriormente
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Estornar registro de peso (US-10)
+      tags:
+      - order-items
+  /order-items/{id}/remover:
+    patch:
+      consumes:
+      - application/json
+      description: Garçom remove um item unitário lançado por engano ou a pedido do
+        cliente. O registro original é preservado — muda só o status pra "removido".
+        Exige motivo.
+      parameters:
+      - description: ID do order_item
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Motivo da remoção
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.motivoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.OrderItem'
+        "400":
+          description: motivo obrigatório
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: item não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: item já foi removido ou estornado anteriormente
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Remover item lançado da comanda (US-12)
+      tags:
+      - order-items
   /pagamentos:
     post:
       consumes:

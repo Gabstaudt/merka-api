@@ -69,6 +69,7 @@ func main() {
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
 	fiscalReceiptRepo := postgres.NewFiscalReceiptRepository(pool)
 	permissionRepo := postgres.NewPermissionRepository(pool)
+	discountRepo := postgres.NewDiscountRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
@@ -96,11 +97,23 @@ func main() {
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
+	liberarComanda := usecase.NewLiberarComanda(comandaRepo)
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo)
+	transferirMesa := usecase.NewTransferirMesa(comandaRepo)
+	aplicarDesconto := usecase.NewAplicarDesconto(orderItemRepo, discountRepo)
+	estornarPeso := usecase.NewEstornarPeso(orderItemRepo)
+	removerItem := usecase.NewRemoverItem(orderItemRepo)
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
-	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub, permissionRepo)
+	comandaHandler := handler.NewComandaHandler(
+		abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
+		auditWriter, hub, permissionRepo,
+	)
 	comandaHandler.RegistrarRotas(protegidas)
+
+	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
+	orderItemHandler.RegistrarRotas(protegidas)
 
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)

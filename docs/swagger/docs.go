@@ -148,6 +148,267 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas/{codigo}/liberar": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Porteiro escaneia a comanda na saída; se estiver paga (sem saldo devedor), o sistema libera de volta pro estoque (status volta a \"disponivel\"). Se ainda tiver saldo pendente, bloqueia com erro claro.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Receber comanda na saída e validar zeramento (US-08)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Código físico da comanda",
+                        "name": "codigo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda ainda não foi paga",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/cancelar": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Gestor/Admin Super (permissão \"cancelar_comanda\"). Zera todos os itens/pesos lançados (marcados como removidos, nunca apagados), marca a comanda como cancelada e a libera de volta pro estoque. Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Cancelar comanda totalmente (US-15)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo do cancelamento",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.cancelarComandaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Comanda"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda não está em uso",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/desconto": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Gestor, Admin Super ou Caixa (permissão \"aplicar_desconto\"). Tipo \"valor_fixo\" ou \"percentual\", sempre com motivo — bloqueia se o desconto resultar em total negativo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Aplicar desconto manual (US-17)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tipo, valor e motivo do desconto",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.aplicarDescontoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Discount"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório ou tipo inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "desconto resultaria em valor negativo",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{id}/itens": {
             "post": {
                 "security": [
@@ -230,6 +491,88 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas/{id}/mesa": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permitida a qualquer perfil autenticado (sem checagem de permissão granular, por decisão do planejamento) — mantém todos os itens/pesos já lançados intactos.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Transferir comanda entre mesas (US-16)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Nova mesa",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.transferirMesaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda ou mesa não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda não está em uso",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{id}/pesos": {
             "post": {
                 "security": [
@@ -293,6 +636,206 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/order-items/{id}/estornar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Operador de Balança remove um lançamento de peso já feito (ex: cliente foi e voltou pra repetir). O registro original é preservado — muda só o status pra \"estornado\". Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "order-items"
+                ],
+                "summary": "Estornar registro de peso (US-10)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do order_item",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo do estorno",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.motivoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.OrderItem"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "item não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "item já foi removido ou estornado anteriormente",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/order-items/{id}/remover": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Garçom remove um item unitário lançado por engano ou a pedido do cliente. O registro original é preservado — muda só o status pra \"removido\". Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "order-items"
+                ],
+                "summary": "Remover item lançado da comanda (US-12)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do order_item",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo da remoção",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.motivoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.OrderItem"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "item não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "item já foi removido ou estornado anteriormente",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -415,6 +958,36 @@ const docTemplate = `{
                 }
             }
         },
+        "domain.Discount": {
+            "type": "object",
+            "properties": {
+                "aplicadoEm": {
+                    "type": "string"
+                },
+                "aplicadoPor": {
+                    "type": "string"
+                },
+                "comandaID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "motivo": {
+                    "type": "string"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipo": {
+                    "$ref": "#/definitions/domain.TipoDesconto"
+                },
+                "valor": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
         "domain.OrderItem": {
             "type": "object",
             "properties": {
@@ -430,6 +1003,9 @@ const docTemplate = `{
                 "lancadoPor": {
                     "type": "string"
                 },
+                "motivoRemocao": {
+                    "type": "string"
+                },
                 "pesoKg": {
                     "description": "usado para itens de peso (peso líquido, já descontada a tara)",
                     "type": "number",
@@ -442,6 +1018,13 @@ const docTemplate = `{
                     "description": "usado para itens unitários",
                     "type": "number",
                     "format": "float64"
+                },
+                "removidoEm": {
+                    "type": "string"
+                },
+                "removidoPor": {
+                    "description": "Preenchidos só quando Status != ativo (US-10/US-12) — o lançamento\noriginal nunca é apagado, só marcado.",
+                    "type": "string"
                 },
                 "status": {
                     "$ref": "#/definitions/domain.StatusOrderItem"
@@ -483,10 +1066,43 @@ const docTemplate = `{
                 "StatusItemEstornado"
             ]
         },
+        "domain.TipoDesconto": {
+            "type": "string",
+            "enum": [
+                "valor_fixo",
+                "percentual"
+            ],
+            "x-enum-varnames": [
+                "DescontoValorFixo",
+                "DescontoPercentual"
+            ]
+        },
         "handler.abrirComandaRequest": {
             "type": "object",
             "properties": {
                 "table_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.aplicarDescontoRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
+                    "type": "string"
+                },
+                "tipo": {
+                    "type": "string"
+                },
+                "valor": {
+                    "type": "number"
+                }
+            }
+        },
+        "handler.cancelarComandaRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
                     "type": "string"
                 }
             }
@@ -549,6 +1165,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.motivoRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.pagamentoParcialRequest": {
             "type": "object",
             "properties": {
@@ -567,6 +1191,14 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "product_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.transferirMesaRequest": {
+            "type": "object",
+            "properties": {
+                "table_id": {
                     "type": "string"
                 }
             }

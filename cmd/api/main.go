@@ -71,6 +71,7 @@ func main() {
 	permissionRepo := postgres.NewPermissionRepository(pool)
 	discountRepo := postgres.NewDiscountRepository(pool)
 	productPriceHistoryRepo := postgres.NewProductPriceHistoryRepository(pool)
+	roleRepo := postgres.NewRoleRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
@@ -107,6 +108,12 @@ func main() {
 	cadastrarProduto := usecase.NewCadastrarProduto(productRepo, productPriceHistoryRepo)
 	configurarPrecoPeso := usecase.NewConfigurarPrecoPeso(productRepo, productPriceHistoryRepo)
 	listarProdutos := usecase.NewListarProdutos(productRepo)
+	criarUsuario := usecase.NewCriarUsuario(userRepo, roleRepo)
+	desativarUsuario := usecase.NewDesativarUsuario(userRepo)
+	criarPerfil := usecase.NewCriarPerfil(roleRepo, permissionRepo)
+	editarPermissoesPerfil := usecase.NewEditarPermissoesPerfil(roleRepo, permissionRepo)
+	listarPerfis := usecase.NewListarPerfis(roleRepo)
+	listarPermissoes := usecase.NewListarPermissoes(permissionRepo)
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
@@ -121,6 +128,12 @@ func main() {
 
 	productHandler := handler.NewProductHandler(cadastrarProduto, configurarPrecoPeso, listarProdutos, auditWriter, permissionRepo)
 	productHandler.RegistrarRotas(protegidas)
+
+	userHandler := handler.NewUserHandler(criarUsuario, desativarUsuario, auditWriter, permissionRepo)
+	userHandler.RegistrarRotas(protegidas)
+
+	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)
+	roleHandler.RegistrarRotas(protegidas)
 
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)

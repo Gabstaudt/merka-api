@@ -923,6 +923,298 @@
                 }
             }
         },
+        "/perfis": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Admin Super e Gestor podem ver — ver comentário em RegistrarRotas sobre a permissão reaproveitada.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Listar perfis do tenant",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.Role"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"criar_perfil\"). Recebe nome e uma lista de chaves de permissão já existentes no catálogo — cria o role e as linhas correspondentes em role_permissions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Criar perfil customizado (US-02)",
+                "parameters": [
+                    {
+                        "description": "Nome do perfil e chaves de permissão",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.criarPerfilRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Role"
+                        }
+                    },
+                    "400": {
+                        "description": "nome obrigatório ou permissão inexistente no catálogo",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe um perfil com esse nome",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/perfis/{id}/permissoes": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"criar_perfil\"). Bloqueia perfis de sistema (ex: \"Admin Super\") — imutáveis, pra não travar o próprio acesso do sistema.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Substituir as permissões de um perfil (US-02)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do perfil",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo conjunto de permissões",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.editarPermissoesPerfilRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Role"
+                        }
+                    },
+                    "400": {
+                        "description": "permissão inexistente no catálogo",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "perfil não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "perfil de sistema é imutável",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/permissoes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Admin Super e Gestor podem ver — mesma permissão reaproveitada de ListarPerfis.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Listar catálogo fixo de permissões",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.PermissionCatalogo"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/produtos": {
             "get": {
                 "security": [
@@ -1141,6 +1433,163 @@
                     }
                 }
             }
+        },
+        "/usuarios": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"criar_usuario\"). Valida que role_id pertence ao mesmo tenant. Senha é sempre gravada como hash bcrypt, nunca em texto puro.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "usuarios"
+                ],
+                "summary": "Criar usuário (US-01)",
+                "parameters": [
+                    {
+                        "description": "Dados do novo usuário",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.criarUsuarioRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handler.usuarioResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "campo obrigatório ausente ou senha curta",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "perfil (role) não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe um usuário com esse login",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/usuarios/{id}/desativar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"criar_usuario\"). Nunca deleta — o usuário perde acesso imediatamente (login passa a falhar), mas o histórico dele em audit_log permanece intacto.",
+                "tags": [
+                    "usuarios"
+                ],
+                "summary": "Desativar usuário (US-01)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do usuário",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "usuário não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1250,6 +1699,59 @@
                 }
             }
         },
+        "domain.Permissao": {
+            "type": "string",
+            "enum": [
+                "criar_usuario",
+                "criar_perfil",
+                "configurar_sistema",
+                "ver_auditoria",
+                "ver_relatorios",
+                "lancar_item",
+                "remover_item",
+                "registrar_peso",
+                "estornar_peso",
+                "transferir_mesa",
+                "aplicar_desconto",
+                "cancelar_comanda",
+                "processar_pagamento",
+                "entregar_comanda",
+                "cadastrar_produto",
+                "configurar_preco_peso"
+            ],
+            "x-enum-varnames": [
+                "PermissaoCriarUsuario",
+                "PermissaoCriarPerfil",
+                "PermissaoConfigurarSistema",
+                "PermissaoVerAuditoria",
+                "PermissaoVerRelatorios",
+                "PermissaoLancarItem",
+                "PermissaoRemoverItem",
+                "PermissaoRegistrarPeso",
+                "PermissaoEstornarPeso",
+                "PermissaoTransferirMesa",
+                "PermissaoAplicarDesconto",
+                "PermissaoCancelarComanda",
+                "PermissaoProcessarPagamento",
+                "PermissaoEntregarComanda",
+                "PermissaoCadastrarProduto",
+                "PermissaoConfigurarPrecoPeso"
+            ]
+        },
+        "domain.PermissionCatalogo": {
+            "type": "object",
+            "properties": {
+                "chave": {
+                    "$ref": "#/definitions/domain.Permissao"
+                },
+                "descricao": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
         "domain.Product": {
             "type": "object",
             "properties": {
@@ -1285,6 +1787,23 @@
                 },
                 "tipoCobranca": {
                     "$ref": "#/definitions/domain.TipoCobranca"
+                }
+            }
+        },
+        "domain.Role": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "sistema": {
+                    "type": "boolean"
+                },
+                "tenantID": {
+                    "type": "string"
                 }
             }
         },
@@ -1402,6 +1921,48 @@
                 }
             }
         },
+        "handler.criarPerfilRequest": {
+            "type": "object",
+            "properties": {
+                "nome": {
+                    "type": "string"
+                },
+                "permissoes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "handler.criarUsuarioRequest": {
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "senha": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.editarPermissoesPerfilRequest": {
+            "type": "object",
+            "properties": {
+                "permissoes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "handler.fecharPagamentoRequest": {
             "type": "object",
             "properties": {
@@ -1494,6 +2055,26 @@
             "type": "object",
             "properties": {
                 "table_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.usuarioResponse": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "login": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "role_id": {
                     "type": "string"
                 }
             }

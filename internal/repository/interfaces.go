@@ -40,9 +40,38 @@ type ComandaRepository interface {
 }
 
 // UserRepository define o contrato de persistência para usuários —
-// usado pelo usecase de autenticação (login).
+// usado pelo usecase de autenticação (login) e pelos usecases de gestão
+// de usuários (US-01).
 type UserRepository interface {
 	BuscarPorLogin(ctx context.Context, login string) (*domain.User, error)
+
+	// Criar grava um novo usuário (US-01) — a senha já deve chegar como
+	// hash bcrypt (o usecase é quem gera o hash, nunca o repository).
+	Criar(ctx context.Context, user *domain.User) error
+
+	// Desativar marca ativo=false — nunca DELETE, o histórico em
+	// audit_log permanece intacto (US-01).
+	Desativar(ctx context.Context, tenantID, userID uuid.UUID) error
+}
+
+// RoleRepository define o contrato de persistência para perfis (roles) —
+// usado por US-01 (validar que o role_id de um novo usuário pertence ao
+// tenant) e US-02 (criar/editar perfis customizados).
+type RoleRepository interface {
+	BuscarPorID(ctx context.Context, tenantID, roleID uuid.UUID) (*domain.Role, error)
+
+	// Criar grava um novo role customizado — sempre sistema=false; só a
+	// migration de seed cria roles de sistema.
+	Criar(ctx context.Context, role *domain.Role) error
+
+	// Listar lista todos os roles do tenant (US-02: popular a tela de
+	// configuração de perfis).
+	Listar(ctx context.Context, tenantID uuid.UUID) ([]domain.Role, error)
+
+	// SubstituirPermissoes apaga todas as linhas de role_permissions do
+	// role e grava o conjunto novo — usado tanto na criação (role novo,
+	// sem permissões ainda) quanto na edição (US-02) de um perfil.
+	SubstituirPermissoes(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error
 }
 
 // ProductRepository define o contrato de persistência para o catálogo de
@@ -145,6 +174,18 @@ type PermissionRepository interface {
 	// UsuarioTemPermissao resolve users.role_id -> role_permissions ->
 	// permissions.chave e devolve se o usuário tem a permissão informada.
 	UsuarioTemPermissao(ctx context.Context, userID uuid.UUID, chave domain.Permissao) (bool, error)
+
+	// BuscarIDsPorChaves resolve uma lista de chaves de permissão pros
+	// seus ids (tabela permissions) — usado por criar_perfil e
+	// editar_permissoes_perfil (US-02) pra validar que todas as chaves
+	// informadas existem no catálogo antes de gravar role_permissions.
+	// Chaves que não existem no catálogo simplesmente não aparecem no
+	// mapa devolvido — cabe ao caller notar a ausência.
+	BuscarIDsPorChaves(ctx context.Context, chaves []domain.Permissao) (map[domain.Permissao]uuid.UUID, error)
+
+	// ListarCatalogo lista todo o catálogo fixo de permissões (GET
+	// /permissoes, US-02).
+	ListarCatalogo(ctx context.Context) ([]domain.PermissionCatalogo, error)
 }
 
 // DiscountRepository define o contrato de persistência para descontos

@@ -1,5 +1,7 @@
 package domain
 
+import "github.com/google/uuid"
+
 // Permissao é a chave de uma permissão do catálogo fixo (tabela
 // `permissions`, seção 16/17 do documento de planejamento). Nunca hardcode
 // `if role == "garcom"` no código — usecases/rotas declaram a permissão
@@ -29,3 +31,12 @@ const (
 	PermissaoCadastrarProduto    Permissao = "cadastrar_produto"
 	PermissaoConfigurarPrecoPeso Permissao = "configurar_preco_peso"
 )
+
+// PermissionCatalogo é uma linha do catálogo fixo de permissões (tabela
+// `permissions`) — usado por GET /permissoes pra popular a tela de
+// configuração de perfis (US-02).
+type PermissionCatalogo struct {
+	ID        uuid.UUID
+	Chave     Permissao
+	Descricao string
+}

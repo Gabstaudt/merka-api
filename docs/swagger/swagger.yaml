@@ -74,6 +74,51 @@ definitions:
         format: float64
         type: number
     type: object
+  domain.Permissao:
+    enum:
+    - criar_usuario
+    - criar_perfil
+    - configurar_sistema
+    - ver_auditoria
+    - ver_relatorios
+    - lancar_item
+    - remover_item
+    - registrar_peso
+    - estornar_peso
+    - transferir_mesa
+    - aplicar_desconto
+    - cancelar_comanda
+    - processar_pagamento
+    - entregar_comanda
+    - cadastrar_produto
+    - configurar_preco_peso
+    type: string
+    x-enum-varnames:
+    - PermissaoCriarUsuario
+    - PermissaoCriarPerfil
+    - PermissaoConfigurarSistema
+    - PermissaoVerAuditoria
+    - PermissaoVerRelatorios
+    - PermissaoLancarItem
+    - PermissaoRemoverItem
+    - PermissaoRegistrarPeso
+    - PermissaoEstornarPeso
+    - PermissaoTransferirMesa
+    - PermissaoAplicarDesconto
+    - PermissaoCancelarComanda
+    - PermissaoProcessarPagamento
+    - PermissaoEntregarComanda
+    - PermissaoCadastrarProduto
+    - PermissaoConfigurarPrecoPeso
+  domain.PermissionCatalogo:
+    properties:
+      chave:
+        $ref: '#/definitions/domain.Permissao'
+      descricao:
+        type: string
+      id:
+        type: string
+    type: object
   domain.Product:
     properties:
       ativo:
@@ -100,6 +145,17 @@ definitions:
         type: string
       tipoCobranca:
         $ref: '#/definitions/domain.TipoCobranca'
+    type: object
+  domain.Role:
+    properties:
+      id:
+        type: string
+      nome:
+        type: string
+      sistema:
+        type: boolean
+      tenantID:
+        type: string
     type: object
   domain.StatusComanda:
     enum:
@@ -180,6 +236,33 @@ definitions:
       tara_kg:
         type: number
     type: object
+  handler.criarPerfilRequest:
+    properties:
+      nome:
+        type: string
+      permissoes:
+        items:
+          type: string
+        type: array
+    type: object
+  handler.criarUsuarioRequest:
+    properties:
+      login:
+        type: string
+      nome:
+        type: string
+      role_id:
+        type: string
+      senha:
+        type: string
+    type: object
+  handler.editarPermissoesPerfilRequest:
+    properties:
+      permissoes:
+        items:
+          type: string
+        type: array
+    type: object
   handler.fecharPagamentoRequest:
     properties:
       comanda_ids:
@@ -239,6 +322,19 @@ definitions:
   handler.transferirMesaRequest:
     properties:
       table_id:
+        type: string
+    type: object
+  handler.usuarioResponse:
+    properties:
+      ativo:
+        type: boolean
+      id:
+        type: string
+      login:
+        type: string
+      nome:
+        type: string
+      role_id:
         type: string
     type: object
 info:
@@ -867,6 +963,200 @@ paths:
       summary: Fechar pagamento de uma ou mais comandas (US-13 + US-14)
       tags:
       - pagamentos
+  /perfis:
+    get:
+      description: Admin Super e Gestor podem ver — ver comentário em RegistrarRotas
+        sobre a permissão reaproveitada.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Role'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar perfis do tenant
+      tags:
+      - perfis
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super (permissão "criar_perfil"). Recebe nome
+        e uma lista de chaves de permissão já existentes no catálogo — cria o role
+        e as linhas correspondentes em role_permissions.
+      parameters:
+      - description: Nome do perfil e chaves de permissão
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.criarPerfilRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Role'
+        "400":
+          description: nome obrigatório ou permissão inexistente no catálogo
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: já existe um perfil com esse nome
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Criar perfil customizado (US-02)
+      tags:
+      - perfis
+  /perfis/{id}/permissoes:
+    put:
+      consumes:
+      - application/json
+      description: 'Restrito a Admin Super (permissão "criar_perfil"). Bloqueia perfis
+        de sistema (ex: "Admin Super") — imutáveis, pra não travar o próprio acesso
+        do sistema.'
+      parameters:
+      - description: ID do perfil
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Novo conjunto de permissões
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.editarPermissoesPerfilRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Role'
+        "400":
+          description: permissão inexistente no catálogo
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: perfil não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: perfil de sistema é imutável
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Substituir as permissões de um perfil (US-02)
+      tags:
+      - perfis
+  /permissoes:
+    get:
+      description: Admin Super e Gestor podem ver — mesma permissão reaproveitada
+        de ListarPerfis.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.PermissionCatalogo'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar catálogo fixo de permissões
+      tags:
+      - perfis
   /produtos:
     get:
       description: Qualquer perfil autenticado — usado por garçom/balança pra escolher
@@ -1014,6 +1304,111 @@ paths:
       summary: Configurar preço/kg e tara de um produto (US-20)
       tags:
       - produtos
+  /usuarios:
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super ou Gestor (permissão "criar_usuario"). Valida
+        que role_id pertence ao mesmo tenant. Senha é sempre gravada como hash bcrypt,
+        nunca em texto puro.
+      parameters:
+      - description: Dados do novo usuário
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.criarUsuarioRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.usuarioResponse'
+        "400":
+          description: campo obrigatório ausente ou senha curta
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: perfil (role) não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: já existe um usuário com esse login
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Criar usuário (US-01)
+      tags:
+      - usuarios
+  /usuarios/{id}/desativar:
+    patch:
+      description: Restrito a Admin Super ou Gestor (permissão "criar_usuario"). Nunca
+        deleta — o usuário perde acesso imediatamente (login passa a falhar), mas
+        o histórico dele em audit_log permanece intacto.
+      parameters:
+      - description: ID do usuário
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: usuário não encontrado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Desativar usuário (US-01)
+      tags:
+      - usuarios
 securityDefinitions:
   BearerAuth:
     description: Informe "Bearer <token>" (token obtido em POST /auth/login)

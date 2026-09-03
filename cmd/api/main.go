@@ -91,7 +91,7 @@ func main() {
 		if cfg.FiscalAmbiente == "producao" {
 			ambiente = fiscal.AmbienteProducao
 		}
-		provider, err := fiscal.NovoFiscalProviderSefazDireto(cfg.FiscalCertPath, cfg.FiscalCertSenha, ambiente)
+		provider, err := fiscal.NovoFiscalProviderSefazDireto(cfg.FiscalCertPath, cfg.FiscalCertSenha, ambiente, cfg.FiscalSefazTimeout)
 		if err != nil {
 			log.Fatalf("FISCAL_PROVIDER=sefaz mas o provider não pôde ser inicializado: %v", err)
 		}

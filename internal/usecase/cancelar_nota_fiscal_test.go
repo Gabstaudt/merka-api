@@ -62,7 +62,7 @@ func TestCancelarNotaFiscal_PontaAPonta(t *testing.T) {
 	defer sefazEventos.Close()
 
 	certificado := certificadoTesteUsecase(t)
-	provider, err := fiscal.NovoFiscalProviderSefazDiretoParaTeste(certificado, fiscal.AmbienteHomologacao)
+	provider, err := fiscal.NovoFiscalProviderSefazDiretoParaTeste(certificado, fiscal.AmbienteHomologacao, 0)
 	if err != nil {
 		t.Fatalf("NovoFiscalProviderSefazDiretoParaTeste: %v", err)
 	}

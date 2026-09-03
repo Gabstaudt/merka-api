@@ -38,11 +38,11 @@ import (
 // nada no corpo da requisição. Por isso EnviarNFCe recebe um
 // *Certificado (ver certificado.go) pra configurar o transporte HTTP.
 //
-// tpEmis=9 (contingência offline): NÃO implementado — ver TODO em
-// xml_builder.go (ide/tpEmis sempre "1", emissão normal) e no fim deste
-// arquivo. Contingência muda o FLUXO inteiro (gravar localmente, tentar
-// depois, DANFE com aviso "emitida em contingência") — é a próxima etapa
-// depois da integração com fechar_pagamento, não faz parte desta.
+// tpEmis=9 (contingência offline, NT 2026.002): ver
+// FiscalProviderSefazDireto.Emitir em sefaz_provider.go — quando
+// EnviarNFCe devolve ErrSefazIndisponivel, o provider gera e assina a
+// NFC-e com tpEmis=9 e NÃO tenta enviar; internal/ws/contingencia_worker.go
+// retransmite em background quando a SEFAZ volta.
 // ============================================================================
 
 const (
@@ -80,6 +80,23 @@ const (
 // armazenada, e pode ser corrigida e reenviada.
 var ErrRejeitadoPelaSefaz = fmt.Errorf("nota fiscal rejeitada pela SEFAZ")
 
+// ErrSefazIndisponivel é retornado quando a SEFAZ não pôde ser alcançada
+// de todo — timeout, DNS, conexão recusada, handshake TLS falho, ou HTTP
+// 5xx (o servidor respondeu, mas com erro de infraestrutura, não uma
+// decisão fiscal). Deliberadamente distinto de ErrRejeitadoPelaSefaz: uma
+// rejeição é uma resposta da SEFAZ sobre o conteúdo da nota (precisa
+// correção); indisponibilidade é a SEFAZ não ter respondido nada — é o
+// gatilho pra emissão em contingência (tpEmis=9, NT 2026.002), não um
+// erro de dados.
+var ErrSefazIndisponivel = fmt.Errorf("SEFAZ indisponível")
+
+// timeoutPadraoSefaz é usado quando NovoSefazClient recebe timeout <= 0.
+// 8s fica dentro da janela de 5-10s recomendada: rápido o bastante pra
+// não travar o caixa numa fila de clientes, generoso o bastante pra não
+// confundir uma rede um pouco lenta com indisponibilidade de verdade
+// (que dispararia contingência desnecessariamente).
+const timeoutPadraoSefaz = 8 * time.Second
+
 // AlertaSefaz é um alerta da NT 2026.002 (PR13/PR14/PR15) — a nota FOI
 // autorizada (cStat=120), mas há algo que vale a pena o emitente conferir.
 type AlertaSefaz struct {
@@ -111,10 +128,16 @@ type SefazClient struct {
 
 // NovoSefazClient monta o client HTTP com TLS mútuo usando o certificado
 // A1 do emitente — a SEFAZ rejeita a conexão (nem chega a processar XML)
-// sem um certificado confiável apresentado no handshake.
-func NovoSefazClient(cert *Certificado, ambiente TipoAmbiente) (*SefazClient, error) {
+// sem um certificado confiável apresentado no handshake. timeout <= 0 usa
+// timeoutPadraoSefaz — configurável (FISCAL_SEFAZ_TIMEOUT_SEGUNDOS, ver
+// config.go) porque é o parâmetro que decide o quão rápido o sistema
+// desiste da SEFAZ e cai pra contingência offline (ETAPA B).
+func NovoSefazClient(cert *Certificado, ambiente TipoAmbiente, timeout time.Duration) (*SefazClient, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("certificado obrigatório para autenticação mTLS com a SEFAZ")
+	}
+	if timeout <= 0 {
+		timeout = timeoutPadraoSefaz
 	}
 
 	tlsCert := tls.Certificate{
@@ -142,7 +165,7 @@ func NovoSefazClient(cert *Certificado, ambiente TipoAmbiente) (*SefazClient, er
 	}
 
 	return &SefazClient{
-		httpClient:     &http.Client{Transport: transport, Timeout: 30 * time.Second},
+		httpClient:     &http.Client{Transport: transport, Timeout: timeout},
 		urlAutorizacao: url,
 		urlEvento:      urlEvento,
 	}, nil
@@ -174,18 +197,24 @@ func (c *SefazClient) EnviarNFCe(ctx context.Context, nfeAssinada *etree.Documen
 	if err != nil {
 		// Cobre timeout, TLS handshake recusado (certificado inválido/não
 		// confiável pra SEFAZ), DNS, conexão recusada, etc. — nenhum
-		// desses é "rejeição fiscal", é falha de comunicação; o caller
-		// (usecase/emitir_nota_fiscal.go) já sabe tratar isso como falha
-		// de emissão sem travar o pagamento.
-		return nil, fmt.Errorf("comunicar com a SEFAZ: %w", err)
+		// desses é "rejeição fiscal", é a SEFAZ inalcançável: gatilho pra
+		// emissão em contingência (ETAPA B), não uma falha de dados que o
+		// operador precisa corrigir.
+		return nil, fmt.Errorf("%w: %v", ErrSefazIndisponivel, err)
 	}
 	defer res.Body.Close()
 
 	corpo, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("ler resposta da SEFAZ: %w", err)
+		return nil, fmt.Errorf("%w: ler resposta: %v", ErrSefazIndisponivel, err)
 	}
 
+	if res.StatusCode >= http.StatusInternalServerError {
+		// 5xx é o servidor da SEFAZ/SVRS respondendo com erro de
+		// infraestrutura (fora do ar, sobrecarregado) — mesma categoria de
+		// "indisponível" que uma falha de rede, não uma rejeição fiscal.
+		return nil, fmt.Errorf("%w: HTTP %d: %s", ErrSefazIndisponivel, res.StatusCode, string(corpo))
+	}
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("SEFAZ retornou HTTP %d: %s", res.StatusCode, string(corpo))
 	}
@@ -360,13 +389,16 @@ func (c *SefazClient) EnviarEventoCancelamento(ctx context.Context, eventoAssina
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("comunicar com a SEFAZ: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrSefazIndisponivel, err)
 	}
 	defer res.Body.Close()
 
 	corpo, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("ler resposta da SEFAZ: %w", err)
+		return nil, fmt.Errorf("%w: ler resposta: %v", ErrSefazIndisponivel, err)
+	}
+	if res.StatusCode >= http.StatusInternalServerError {
+		return nil, fmt.Errorf("%w: HTTP %d: %s", ErrSefazIndisponivel, res.StatusCode, string(corpo))
 	}
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("SEFAZ retornou HTTP %d: %s", res.StatusCode, string(corpo))

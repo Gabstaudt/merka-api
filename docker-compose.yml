@@ -40,6 +40,7 @@ services:
       # mock (padrão) | sefaz — ver .env.example
       FISCAL_PROVIDER: ${FISCAL_PROVIDER:-mock}
       FISCAL_AMBIENTE: ${FISCAL_AMBIENTE:-homologacao}
+      FISCAL_SEFAZ_TIMEOUT_SEGUNDOS: ${FISCAL_SEFAZ_TIMEOUT_SEGUNDOS:-8}
     ports:
       - "8080:8080"
     # Descomente e ajuste quando o certificado .pfx estiver disponível —

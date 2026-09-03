@@ -22,13 +22,13 @@ type FiscalProviderSefazDireto struct {
 // startup, não na primeira emissão) se o certificado não carregar — é
 // preferível a aplicação não subir a subir e falhar silenciosamente toda
 // emissão fiscal.
-func NovoFiscalProviderSefazDireto(certPath, certSenha string, ambiente TipoAmbiente) (*FiscalProviderSefazDireto, error) {
+func NovoFiscalProviderSefazDireto(certPath, certSenha string, ambiente TipoAmbiente, timeout time.Duration) (*FiscalProviderSefazDireto, error) {
 	cert, err := CarregarCertificado(certPath, certSenha)
 	if err != nil {
 		return nil, fmt.Errorf("carregar certificado fiscal: %w", err)
 	}
 
-	client, err := NovoSefazClient(cert, ambiente)
+	client, err := NovoSefazClient(cert, ambiente, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("montar cliente SEFAZ: %w", err)
 	}
@@ -39,9 +39,9 @@ func NovoFiscalProviderSefazDireto(certPath, certSenha string, ambiente TipoAmbi
 // NovoFiscalProviderSefazDiretoParaTeste monta o provider a partir de um
 // *Certificado já em memória (ex: gerado por gerarCertificadoTeste), sem
 // ler arquivo — usado só em testes de integração que não têm um .pfx real
-// disponível.
-func NovoFiscalProviderSefazDiretoParaTeste(cert *Certificado, ambiente TipoAmbiente) (*FiscalProviderSefazDireto, error) {
-	client, err := NovoSefazClient(cert, ambiente)
+// disponível. timeout <= 0 usa timeoutPadraoSefaz.
+func NovoFiscalProviderSefazDiretoParaTeste(cert *Certificado, ambiente TipoAmbiente, timeout time.Duration) (*FiscalProviderSefazDireto, error) {
+	client, err := NovoSefazClient(cert, ambiente, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("montar cliente SEFAZ: %w", err)
 	}

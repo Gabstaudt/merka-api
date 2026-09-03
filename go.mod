@@ -3,14 +3,17 @@ module github.com/merka/api
 go 1.25.0
 
 require (
+	github.com/beevik/etree v1.7.0
 	github.com/gofiber/contrib/websocket v1.3.4
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.4
+	github.com/russellhaering/goxmldsig v1.6.1
 	github.com/swaggo/fiber-swagger v1.3.0
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/crypto v0.55.0
+	software.sslmate.com/src/go-pkcs12 v0.7.3
 )
 
 require (
@@ -26,6 +29,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
+	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect

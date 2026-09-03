@@ -1,0 +1,14 @@
+# Segredos locais — nunca versionar.
+.env
+.env.*
+!.env.example
+
+# Certificado digital A1 (ICP-Brasil) usado pra assinar NFC-e — ver
+# CLAUDE.md e internal/fiscal/certificado.go. Nunca commitar a chave
+# privada/certificado real.
+*.pfx
+*.p12
+
+# Go
+/tmp/
+*.test

@@ -29,8 +29,22 @@ services:
       PORT: 8080
       DATABASE_URL: postgres://merka:merka@postgres:5432/merka?sslmode=disable
       JWT_SECRET: dev-secret-trocar-em-producao
+      # Certificado digital A1 (ICP-Brasil) usado pra assinar XML de NFC-e
+      # (integração direta SEFAZ — ver CLAUDE.md e internal/fiscal/).
+      # Nunca hardcoded aqui: os valores vêm do .env local (não versionado)
+      # ou do ambiente do host — se não definidos, ficam vazios e o
+      # provider real simplesmente não carrega (ver
+      # internal/fiscal/certificado.go — ErrCertificadoNaoConfigurado).
+      FISCAL_CERT_PATH: ${FISCAL_CERT_PATH:-}
+      FISCAL_CERT_SENHA: ${FISCAL_CERT_SENHA:-}
     ports:
       - "8080:8080"
+    # Descomente e ajuste quando o certificado .pfx estiver disponível —
+    # o arquivo do host é montado (read-only) no caminho que
+    # FISCAL_CERT_PATH aponta dentro do container. O .pfx em si NUNCA
+    # deve ir pro repositório (adicionar ao .gitignore).
+    # volumes:
+    #   - ${FISCAL_CERT_HOST_PATH}:${FISCAL_CERT_PATH}:ro
 
 volumes:
   merka_pgdata:

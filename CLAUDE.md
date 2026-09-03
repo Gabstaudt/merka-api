@@ -169,6 +169,16 @@ CREATE POLICY tenant_isolation ON nome_tabela
 - Toda migration numerada sequencialmente (`0002_...`, `0003_...`) em
   `migrations/`
 
+## TODOs pendentes
+
+- **Rodar `swag init`** para regenerar `docs/swagger/*` com as anotações
+  do endpoint `POST /pagamentos/:id/cancelar-nota` (`CancelarNota`,
+  `internal/handler/payment_handler.go`) — as anotações swaggo já estão
+  no código, mas o CLI `swag` não está instalado neste ambiente, então os
+  arquivos gerados (`docs/swagger/docs.go`, `swagger.json`, `swagger.yaml`)
+  ainda não refletem essa rota. Resolver separadamente (instalar `swag` e
+  rodar `swag init`, ou gerar num ambiente que já tenha o CLI).
+
 ## Próximo passo sugerido
 
 Implementar o primeiro fluxo ponta a ponta: `abrir_comanda` (usecase) →

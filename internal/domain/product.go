@@ -24,4 +24,11 @@ type Product struct {
 	PrecoPorKg    float64 // usado quando TipoCobranca == TipoCobrancaPeso
 	TaraKg        float64 // peso do prato/recipiente, descontado do peso bruto lido na balança
 	Ativo         bool
+
+	// NCM/CFOP: obrigatórios para emitir NFC-e via SEFAZ direta (ETAPA 4,
+	// ver CLAUDE.md) — nil em produtos cadastrados antes da migration
+	// 0014. internal/fiscal.FiscalProviderSefazDireto recusa emitir nota
+	// com item sem esses dados em vez de estimar um valor.
+	NCM  *string
+	CFOP *string
 }

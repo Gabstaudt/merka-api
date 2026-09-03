@@ -215,7 +215,8 @@ func MontarNFCe(input NFCeInput) (*etree.Document, error) {
 func construirIde(infNFe *etree.Element, input NFCeInput) {
 	ide := infNFe.CreateElement("ide")
 	ide.CreateElement("cUF").SetText(codigoUF(input.Emitente.UF))
-	ide.CreateElement("cNF").SetText("00000000") // TODO(ETAPA 3): código numérico aleatório de 8 dígitos, parte da chave de acesso real
+	cNF, cDV := extrairCNFCDVDaChave(input.ChaveAcesso)
+	ide.CreateElement("cNF").SetText(cNF)
 	ide.CreateElement("natOp").SetText("VENDA")
 	ide.CreateElement("mod").SetText(modeloNFCe)
 	ide.CreateElement("serie").SetText(fmt.Sprintf("%d", input.Serie))
@@ -226,7 +227,7 @@ func construirIde(infNFe *etree.Element, input NFCeInput) {
 	ide.CreateElement("cMunFG").SetText(input.Emitente.CodigoMunicipio)
 	ide.CreateElement("tpImp").SetText("4")  // DANFE NFC-e
 	ide.CreateElement("tpEmis").SetText("1") // emissão normal — ETAPA 3 trata contingência
-	ide.CreateElement("cDV").SetText("0")    // TODO(ETAPA 3): dígito verificador real da chave
+	ide.CreateElement("cDV").SetText(cDV)
 	ide.CreateElement("tpAmb").SetText(string(input.Ambiente))
 	ide.CreateElement("finNFe").SetText("1")   // normal
 	ide.CreateElement("indFinal").SetText("1") // consumidor final
@@ -386,6 +387,20 @@ func formatarDecimal(v float64, casas int) string {
 
 func arredondarMoeda2(v float64) float64 {
 	return float64(int64(v*100+0.5)) / 100
+}
+
+// extrairCNFCDVDaChave lê cNF (posições 35-42) e cDV (posição 43) de uma
+// chave de acesso de 44 dígitos já montada por GerarChaveAcesso — os
+// elementos <cNF>/<cDV> do XML precisam bater exatamente com o que está
+// codificado na chave (atributo Id do infNFe), senão a SEFAZ rejeita por
+// inconsistência. Se a chave não tiver 44 dígitos (ex: valor de teste
+// mais curto em unit test que não valida esses campos), devolve
+// placeholders só pra não quebrar a montagem do XML.
+func extrairCNFCDVDaChave(chaveAcesso string) (cNF, cDV string) {
+	if len(chaveAcesso) != 44 {
+		return "00000000", "0"
+	}
+	return chaveAcesso[35:43], chaveAcesso[43:44]
 }
 
 // codigoUF traduz a sigla da UF pro código IBGE de 2 dígitos usado em

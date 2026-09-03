@@ -125,6 +125,29 @@ type OrderItemRepository interface {
 	// 'ativo' de uma comanda como 'removido' de uma vez — usado pelo
 	// cancelamento total (US-15: "zera todos os itens/pesos lançados").
 	RemoverTodosAtivosDaComanda(ctx context.Context, comandaID, removidoPor uuid.UUID, motivo string) error
+
+	// ListarAtivosPorComandas busca os order_items 'ativo' das comandas
+	// informadas — usado por internal/fiscal.FiscalProviderSefazDireto
+	// (ETAPA 4) pra montar o detalhamento item a item exigido pela NFC-e,
+	// já que SomarTotalAtivo só devolve o total agregado.
+	ListarAtivosPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) ([]domain.OrderItem, error)
+}
+
+// TenantRepository define o contrato de persistência para os dados
+// cadastrais do tenant — hoje usado só pela emissão fiscal (ETAPA 4, ver
+// CLAUDE.md) pra resolver o emitente da NFC-e e a numeração sequencial.
+type TenantRepository interface {
+	// BuscarDadosFiscais lê os campos fiscais do tenant (migration 0013).
+	// Campos nil no retorno indicam cadastro incompleto — quem chama
+	// decide como reagir (nunca inventa um valor).
+	BuscarDadosFiscais(ctx context.Context, tenantID uuid.UUID) (*domain.DadosFiscaisTenant, error)
+
+	// ProximoNumeroNFCe incrementa atomicamente nfce_proximo_numero e
+	// devolve o número reservado (junto com a série corrente) — a SEFAZ
+	// exige numeração sequencial crescente sem lacunas nem repetição por
+	// série, mesmo em caso de rejeição (o número vai para "inutilização",
+	// nunca é reaproveitado).
+	ProximoNumeroNFCe(ctx context.Context, tenantID uuid.UUID) (numero, serie int, err error)
 }
 
 // PaymentRepository define o contrato de persistência para pagamentos —

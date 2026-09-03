@@ -29,7 +29,7 @@ func NewProductRepository(pool *pgxpool.Pool) repository.ProductRepository {
 func (r *productRepository) BuscarPorID(ctx context.Context, tenantID, productID uuid.UUID) (*domain.Product, error) {
 	const query = `
 		SELECT id, tenant_id, category_id, nome, tipo_cobranca,
-		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo
+		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo, ncm, cfop
 		FROM products
 		WHERE tenant_id = $1 AND id = $2
 	`
@@ -39,7 +39,7 @@ func (r *productRepository) BuscarPorID(ctx context.Context, tenantID, productID
 	var p domain.Product
 	err := db.QueryRow(ctx, query, tenantID, productID).Scan(
 		&p.ID, &p.TenantID, &p.CategoryID, &p.Nome, &p.TipoCobranca,
-		&p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo,
+		&p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo, &p.NCM, &p.CFOP,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrProdutoNaoEncontrado

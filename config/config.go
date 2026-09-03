@@ -17,6 +17,17 @@ type Config struct {
 	// simplesmente não carrega (ver internal/fiscal/certificado.go).
 	FiscalCertPath  string
 	FiscalCertSenha string
+
+	// FiscalProvider seleciona a implementação de fiscal.Provider usada
+	// por fechar_pagamento: "mock" (padrão, sempre emite com sucesso, sem
+	// falar com a SEFAZ) ou "sefaz" (integração direta, ETAPA 4 — ver
+	// CLAUDE.md). Existe pra poder voltar ao mock rapidamente em produção
+	// se a integração real travar, sem precisar de deploy de código.
+	FiscalProvider string
+
+	// FiscalAmbiente: "homologacao" (padrão, tpAmb=2) ou "producao"
+	// (tpAmb=1) — só usado quando FiscalProvider=sefaz.
+	FiscalAmbiente string
 }
 
 func Load() Config {
@@ -26,6 +37,8 @@ func Load() Config {
 		JWTSecret:       getEnv("JWT_SECRET", "dev-secret-trocar-em-producao"),
 		FiscalCertPath:  getEnv("FISCAL_CERT_PATH", ""),
 		FiscalCertSenha: getEnv("FISCAL_CERT_SENHA", ""),
+		FiscalProvider:  getEnv("FISCAL_PROVIDER", "mock"),
+		FiscalAmbiente:  getEnv("FISCAL_AMBIENTE", "homologacao"),
 	}
 }
 

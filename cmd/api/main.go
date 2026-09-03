@@ -77,10 +77,30 @@ func main() {
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
-	// Provider mock: simula emissão de NFC-e com sucesso, sem depender de
-	// credenciais reais de integradora ainda (ver internal/fiscal/mock_provider.go
-	// para o exemplo comentado de como plugar a Focus NFe de verdade).
-	fiscalProvider := fiscal.NewMockProvider()
+	tenantRepo := postgres.NewTenantRepository(pool)
+
+	// FISCAL_PROVIDER=mock (padrão) simula emissão com sucesso, sem falar
+	// com a SEFAZ — bom pra dev local e pra voltar rápido em produção se a
+	// integração real travar. FISCAL_PROVIDER=sefaz usa a integração
+	// direta (ETAPA 4, ver CLAUDE.md); falha no boot se o certificado A1
+	// não carregar, em vez de subir e falhar toda emissão em silêncio.
+	var fiscalProvider fiscal.Provider
+	switch cfg.FiscalProvider {
+	case "sefaz":
+		ambiente := fiscal.AmbienteHomologacao
+		if cfg.FiscalAmbiente == "producao" {
+			ambiente = fiscal.AmbienteProducao
+		}
+		provider, err := fiscal.NovoFiscalProviderSefazDireto(cfg.FiscalCertPath, cfg.FiscalCertSenha, ambiente)
+		if err != nil {
+			log.Fatalf("FISCAL_PROVIDER=sefaz mas o provider não pôde ser inicializado: %v", err)
+		}
+		fiscalProvider = provider
+		log.Printf("fiscal: emitindo NFC-e via integração direta com a SEFAZ (ambiente=%s)", cfg.FiscalAmbiente)
+	default:
+		fiscalProvider = fiscal.NewMockProvider()
+		log.Printf("fiscal: emitindo NFC-e via MockProvider (defina FISCAL_PROVIDER=sefaz pra usar a integração real)")
+	}
 
 	// GET /ws precisa ser registrado ANTES do app.Group("/", ...) abaixo:
 	// um Group com prefixo "/" vira middleware casando com qualquer rota
@@ -119,7 +139,7 @@ func main() {
 	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
 	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
 	consultarNotasFiscais := usecase.NewConsultarNotasFiscais(fiscalReceiptRepo)
-	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
 	comandaHandler := handler.NewComandaHandler(

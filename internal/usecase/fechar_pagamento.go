@@ -120,7 +120,7 @@ func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor
 		// completo). "documento" (CPF/CNPJ) ainda não é capturado no
 		// fechamento — fica vazio até a tela de caixa expor esse campo.
 		if DeveEmitirAutomaticamente(p.Metodo) {
-			uc.emitirNotaFiscal.Executar(ctx, tenantID, id, p.Metodo, p.Valor, "")
+			uc.emitirNotaFiscal.Executar(ctx, tenantID, id, p.Metodo, p.Valor, "", comandaIDs)
 		}
 	}
 

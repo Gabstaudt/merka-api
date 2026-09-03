@@ -175,6 +175,40 @@ func TestMontarNFCe_Validacoes(t *testing.T) {
 	}
 }
 
+// TestMontarNFCe_DescricaoHomologacao confere a regra I04-10 (NT
+// 2026.002): em homologação, o primeiro item precisa ter essa descrição
+// exata — o segundo item (e o cálculo de valores/impostos) continua
+// normal.
+func TestMontarNFCe_DescricaoHomologacao(t *testing.T) {
+	input := exemploInput()
+	input.Ambiente = AmbienteHomologacao
+
+	doc, err := MontarNFCe(input)
+	if err != nil {
+		t.Fatalf("MontarNFCe: %v", err)
+	}
+
+	dets := doc.FindElements("//det")
+	if len(dets) != 2 {
+		t.Fatalf("esperava 2 <det>, achou %d", len(dets))
+	}
+
+	verificarTexto(t, dets[0], "prod/xProd", "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL")
+	verificarTexto(t, dets[1], "prod/xProd", "Refrigerante Lata")
+
+	// O valor do primeiro item não muda — só a descrição.
+	verificarTexto(t, dets[0], "prod/vProd", "39.95")
+
+	// Em produção, a descrição real deve ser preservada.
+	inputProducao := exemploInput()
+	inputProducao.Ambiente = AmbienteProducao
+	docProducao, err := MontarNFCe(inputProducao)
+	if err != nil {
+		t.Fatalf("MontarNFCe (produção): %v", err)
+	}
+	verificarTexto(t, docProducao.FindElement("//det"), "prod/xProd", "Buffet por Peso")
+}
+
 func verificarTexto(t *testing.T, base *etree.Element, path, want string) {
 	t.Helper()
 

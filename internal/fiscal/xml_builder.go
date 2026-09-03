@@ -186,8 +186,22 @@ func MontarNFCe(input NFCeInput) (*etree.Document, error) {
 	construirIde(infNFe, input)
 	construirEmit(infNFe, input.Emitente)
 
+	// Regra I04-10 (NT 2026.002, docs/fiscal/NT_2026.002_...pdf): em
+	// ambiente de homologação, a descrição do PRIMEIRO item precisa ser
+	// exatamente "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM
+	// VALOR FISCAL" (maiúsculas, sem acento) — senão a SEFAZ rejeita a
+	// nota inteira (rejeição 373). Não altera o valor do item, só o texto
+	// exibido — a churrascaria continua vendo o produto real no seu
+	// próprio sistema, só o XML que sai pra SEFAZ muda.
+	itens := input.Itens
+	if input.Ambiente == AmbienteHomologacao && len(itens) > 0 {
+		primeiro := itens[0]
+		primeiro.Descricao = "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+		itens = append([]ItemInput{primeiro}, itens[1:]...)
+	}
+
 	var vProdTotal float64
-	for _, item := range input.Itens {
+	for _, item := range itens {
 		construirDet(infNFe, item)
 		vProdTotal = arredondarMoeda2(vProdTotal + item.ValorTotal)
 	}

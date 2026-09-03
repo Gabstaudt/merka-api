@@ -65,9 +65,20 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 	}
 	digest := sha256.Sum256(canonicalEl)
 
-	// 2. Monta <SignedInfo> com a Reference apontando pro Id do elemento.
-	signedInfo := etree.NewElement("ds:SignedInfo")
-	signedInfo.CreateAttr("xmlns:ds", xmldsigNamespace)
+	// 2. Monta <Signature>/<SignedInfo> com a Reference apontando pro Id
+	// do elemento, e JÁ ANEXA no elemento (el.AddChild) antes de
+	// canonicalizar o SignedInfo pra assinar — precisa ser assim, não
+	// como uma árvore solta: C14N inclusivo renderiza os namespaces
+	// herdados dos ancestrais (ex: o xmlns="..." default lá no elemento
+	// raiz do documento) no elemento canonicalizado, e um SignedInfo
+	// ainda desanexado não tem esses ancestrais — canonicalizaria
+	// diferente do que a verificação vai ver depois (com o SignedInfo já
+	// dentro do documento). Assinar "no lugar certo" evita essa
+	// assimetria.
+	signature := el.CreateElement("ds:Signature")
+	signature.CreateAttr("xmlns:ds", xmldsigNamespace)
+
+	signedInfo := signature.CreateElement("ds:SignedInfo")
 
 	canonMethod := signedInfo.CreateElement("ds:CanonicalizationMethod")
 	canonMethod.CreateAttr("Algorithm", c14n10RecURI)
@@ -85,7 +96,7 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 	reference.CreateElement("ds:DigestMethod").CreateAttr("Algorithm", sha256DigestURI)
 	reference.CreateElement("ds:DigestValue").SetText(base64.StdEncoding.EncodeToString(digest[:]))
 
-	// 3. Canonicaliza e assina o próprio <SignedInfo> (RSA-SHA256).
+	// 3. Canonicaliza e assina o SignedInfo já anexado (RSA-SHA256).
 	canonicalSignedInfo, err := canonicalizer.Canonicalize(signedInfo)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalizar SignedInfo: %w", err)
@@ -97,19 +108,13 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 		return nil, fmt.Errorf("assinar SignedInfo com a chave privada: %w", err)
 	}
 
-	// 4. Monta <Signature> completo: SignedInfo + SignatureValue + KeyInfo.
-	signature := etree.NewElement("ds:Signature")
-	signature.CreateAttr("xmlns:ds", xmldsigNamespace)
-	signature.AddChild(signedInfo)
-
+	// 4. Completa <Signature>: SignatureValue + KeyInfo.
 	signature.CreateElement("ds:SignatureValue").SetText(base64.StdEncoding.EncodeToString(signatureBytes))
 
 	x509Cert := signature.CreateElement("ds:KeyInfo").
 		CreateElement("ds:X509Data").
 		CreateElement("ds:X509Certificate")
 	x509Cert.SetText(base64.StdEncoding.EncodeToString(cert.Certificado.Raw))
-
-	el.AddChild(signature)
 
 	return el, nil
 }
@@ -150,16 +155,18 @@ func VerificarAssinatura(el *etree.Element, idAttr string, certConfiavel *x509.C
 
 	canonicalizer := dsig.MakeC14N10RecCanonicalizer()
 
-	// Recalcula o digest do conteúdo — cópia do elemento com <Signature>
-	// removido, igual ao "enveloped-signature transform".
-	semAssinatura := el.Copy()
-	if s := ultimoFilhoComTag(semAssinatura, "Signature"); s != nil {
-		semAssinatura.RemoveChild(s)
-	}
-
-	canonicalEl, err := canonicalizer.Canonicalize(semAssinatura)
-	if err != nil {
-		return fmt.Errorf("canonicalizar elemento pra verificar digest: %w", err)
+	// Recalcula o digest do conteúdo — remove <Signature> temporariamente
+	// do próprio elemento (em vez de canonicalizar uma cópia desanexada
+	// via el.Copy()) porque C14N inclusivo precisa dos namespaces
+	// herdados dos ancestrais (ex: infNFe filho de NFe xmlns="..."); uma
+	// cópia desanexada perde essa referência e o digest bateria errado
+	// mesmo com uma assinatura válida. Restaura o filho antes de sair,
+	// por qualquer caminho — nunca deixa o elemento do caller mutado.
+	el.RemoveChild(sig)
+	canonicalEl, canonErr := canonicalizer.Canonicalize(el)
+	el.AddChild(sig)
+	if canonErr != nil {
+		return fmt.Errorf("canonicalizar elemento pra verificar digest: %w", canonErr)
 	}
 	digestCalculado := sha256.Sum256(canonicalEl)
 

@@ -179,7 +179,9 @@ type SyncAlertRepository interface {
 // manter a camada de persistência desacoplada de qual provider foi usado.
 type FiscalReceiptRepository interface {
 	// RegistrarEmitida grava uma emissão de NFC-e bem-sucedida.
-	RegistrarEmitida(ctx context.Context, tenantID, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe string) error
+	// protocoloAutorizacao é o nProt devolvido pela SEFAZ — necessário
+	// pra um cancelamento futuro dessa nota (US-22).
+	RegistrarEmitida(ctx context.Context, tenantID, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe, protocoloAutorizacao string) error
 
 	// RegistrarFalha grava uma tentativa de emissão que falhou —
 	// emitida=false, nunca é silenciada: fica visível para Admin/Gestor
@@ -191,6 +193,16 @@ type FiscalReceiptRepository interface {
 	// coluna de criado_em própria, então o filtro de período usa
 	// payments.processado_em (via join) — ver domain.FiscalReceipt.
 	Listar(ctx context.Context, tenantID uuid.UUID, filtro FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error)
+
+	// BuscarPorPaymentID busca o fiscal_receipt de um payment — usado
+	// pelo cancelamento (US-22) pra achar a chave/protocolo da nota a
+	// cancelar e conferir se ela já não foi cancelada antes.
+	BuscarPorPaymentID(ctx context.Context, tenantID, paymentID uuid.UUID) (*domain.FiscalReceipt, error)
+
+	// RegistrarCancelamento grava o resultado de um cancelamento
+	// bem-sucedido (US-22) — cancelada=true, protocolo do evento e
+	// motivo (xJust) informado pelo usuário.
+	RegistrarCancelamento(ctx context.Context, tenantID, paymentID uuid.UUID, protocoloCancelamento, motivo string) error
 }
 
 // FiscalReceiptFiltro são os filtros aceitos por FiscalReceiptRepository.Listar

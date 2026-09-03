@@ -30,6 +30,7 @@ const (
 	PermissaoEntregarComanda     Permissao = "entregar_comanda"
 	PermissaoCadastrarProduto    Permissao = "cadastrar_produto"
 	PermissaoConfigurarPrecoPeso Permissao = "configurar_preco_peso"
+	PermissaoCancelarNotaFiscal  Permissao = "cancelar_nota_fiscal"
 )
 
 // PermissionCatalogo é uma linha do catálogo fixo de permissões (tabela

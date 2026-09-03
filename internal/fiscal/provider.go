@@ -38,9 +38,24 @@ type PaymentInfo struct {
 
 // NFCeResult é o retorno de uma emissão bem-sucedida.
 type NFCeResult struct {
-	ChaveAcesso string // chave de acesso de 44 dígitos da NFC-e
-	NumeroNota  string
-	LinkDANFE   string // link do documento auxiliar (recibo do cliente)
+	ChaveAcesso          string // chave de acesso de 44 dígitos da NFC-e
+	NumeroNota           string
+	LinkDANFE            string // link do documento auxiliar (recibo do cliente)
+	ProtocoloAutorizacao string // nProt devolvido pela SEFAZ — exigido pra cancelar a nota depois (US-22)
+}
+
+// CancelamentoInfo é o que Provider.Cancelar precisa pra montar/enviar o
+// evento de cancelamento (US-22) de uma NFC-e já emitida.
+type CancelamentoInfo struct {
+	ChaveAcesso          string
+	ProtocoloAutorizacao string // nProt da emissão original
+	Justificativa        string // xJust — SEFAZ exige mínimo 15 caracteres
+	CNPJEmitente         string
+}
+
+// CancelamentoResultado é o retorno de um cancelamento bem-sucedido.
+type CancelamentoResultado struct {
+	ProtocoloCancelamento string
 }
 
 // Provider abstrai a integradora fiscal. O usecase de emissão
@@ -49,4 +64,9 @@ type NFCeResult struct {
 // regra de negócio.
 type Provider interface {
 	Emitir(ctx context.Context, payment PaymentInfo) (NFCeResult, error)
+
+	// Cancelar cancela uma NFC-e já emitida (US-22) — quem chama já
+	// validou prazo/estado antes (ver usecase.CancelarNotaFiscal); o
+	// provider só monta/envia o evento e devolve o protocolo.
+	Cancelar(ctx context.Context, info CancelamentoInfo) (CancelamentoResultado, error)
 }

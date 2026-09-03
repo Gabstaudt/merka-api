@@ -50,8 +50,21 @@ const (
 	urlAutorizacaoProducao    = "https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx"
 	urlStatusHomologacao      = "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx"
 
+	// RecepcaoEvento4 — webservice de eventos (cancelamento, carta de
+	// correção, etc.) da SVRS. Cancelamento (US-22, ETAPA 5) é o único
+	// evento implementado nesta etapa.
+	urlEventoHomologacao = "https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx"
+	urlEventoProducao    = "https://nfce.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx"
+
 	soapActionNFeAutorizacao = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"
 	soapActionStatusServico  = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4/nfeStatusServicoNF"
+	soapActionRecepcaoEvento = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento"
+
+	// tpEvento/cStat do cancelamento (Manual de Orientação do
+	// Contribuinte, evento "Cancelamento", schema não relacionado à
+	// reforma tributária — parte estável do layout).
+	tpEventoCancelamento  = "110111"
+	CStatEventoHomologado = "135" // Evento registrado e vinculado a NF-e
 )
 
 // Códigos de status (cStat) relevantes — protNFe/infProt/cStat, ver
@@ -93,6 +106,7 @@ type RespostaAutorizacao struct {
 type SefazClient struct {
 	httpClient     *http.Client
 	urlAutorizacao string
+	urlEvento      string
 }
 
 // NovoSefazClient monta o client HTTP com TLS mútuo usando o certificado
@@ -122,14 +136,15 @@ func NovoSefazClient(cert *Certificado, ambiente TipoAmbiente) (*SefazClient, er
 		},
 	}
 
-	url := urlAutorizacaoHomologacao
+	url, urlEvento := urlAutorizacaoHomologacao, urlEventoHomologacao
 	if ambiente == AmbienteProducao {
-		url = urlAutorizacaoProducao
+		url, urlEvento = urlAutorizacaoProducao, urlEventoProducao
 	}
 
 	return &SefazClient{
 		httpClient:     &http.Client{Transport: transport, Timeout: 30 * time.Second},
 		urlAutorizacao: url,
+		urlEvento:      urlEvento,
 	}, nil
 }
 
@@ -143,7 +158,11 @@ func (c *SefazClient) EnviarNFCe(ctx context.Context, nfeAssinada *etree.Documen
 		return nil, fmt.Errorf("serializar XML da NFC-e: %w", err)
 	}
 
-	envelope := montarEnvelopeSOAP(nfeXML)
+	enviNFe := fmt.Sprintf(
+		`<enviNFe xmlns="%s" versao="4.00"><idLote>1</idLote><indSinc>1</indSinc>%s</enviNFe>`,
+		nfeNamespace, nfeXML,
+	)
+	envelope := montarEnvelopeSOAPGenerico(enviNFe, "nfeDadosMsg", "NFeAutorizacao4")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.urlAutorizacao, bytes.NewReader([]byte(envelope)))
 	if err != nil {
@@ -181,7 +200,7 @@ func (c *SefazClient) ConsultarStatusServico(ctx context.Context, cUF string) (c
 	corpoConsulta := fmt.Sprintf(`<consStatServ xmlns="%s" versao="4.00"><tpAmb>%s</tpAmb><cUF>%s</cUF><xServ>STATUS</xServ></consStatServ>`,
 		nfeNamespace, statusAmbiente(c.urlAutorizacao), cUF)
 
-	envelope := montarEnvelopeSOAPGenerico(corpoConsulta, "nfeDadosMsg")
+	envelope := montarEnvelopeSOAPGenerico(corpoConsulta, "nfeDadosMsg", "NfeStatusServico4")
 
 	url := urlStatusHomologacao
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader([]byte(envelope)))
@@ -304,25 +323,100 @@ func textoOuVazio(el *etree.Element, tag string) string {
 	return child.Text()
 }
 
-// montarEnvelopeSOAP embrulha o XML da NFe assinada num envelope SOAP 1.2
-// dentro de <enviNFe> (formato de lote, mas com um único item e
-// indSinc=1 — processamento síncrono, padrão pra NFC-e).
-func montarEnvelopeSOAP(nfeXML string) string {
-	enviNFe := fmt.Sprintf(
-		`<enviNFe xmlns="%s" versao="4.00"><idLote>1</idLote><indSinc>1</indSinc>%s</enviNFe>`,
-		nfeNamespace, nfeXML,
-	)
-	return montarEnvelopeSOAPGenerico(enviNFe, "nfeDadosMsg")
-}
-
-func montarEnvelopeSOAPGenerico(corpo, elemento string) string {
+// montarEnvelopeSOAPGenerico embrulha corpo num envelope SOAP 1.2 —
+// wsdlServico é o nome do serviço (NFeAutorizacao4/NfeStatusServico4/
+// NFeRecepcaoEvento4) que compõe o namespace do elemento wrapper,
+// conforme o WSDL de cada webservice da SVRS.
+func montarEnvelopeSOAPGenerico(corpo, elemento, wsdlServico string) string {
 	return fmt.Sprintf(
 		`<?xml version="1.0" encoding="UTF-8"?>`+
 			`<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">`+
-			`<soap12:Body><%s xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">%s</%s></soap12:Body>`+
+			`<soap12:Body><%s xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/%s">%s</%s></soap12:Body>`+
 			`</soap12:Envelope>`,
-		elemento, corpo, elemento,
+		elemento, wsdlServico, corpo, elemento,
 	)
+}
+
+// EnviarEventoCancelamento envia o evento de cancelamento assinado (ver
+// MontarEventoCancelamento em cancelamento.go) pro webservice de eventos
+// e interpreta a resposta — cStat=135 é o único caso tratado como
+// sucesso (evento homologado e vinculado à NF-e); qualquer outro é
+// devolvido como erro, sem retry automático (US-22: rejeição precisa de
+// decisão humana, não de reenvio silencioso).
+func (c *SefazClient) EnviarEventoCancelamento(ctx context.Context, eventoAssinado *etree.Document) (*RespostaEvento, error) {
+	eventoXML, err := eventoAssinado.WriteToString()
+	if err != nil {
+		return nil, fmt.Errorf("serializar XML do evento: %w", err)
+	}
+
+	envLote := fmt.Sprintf(`<envEvento xmlns="%s" versao="1.00"><idLote>1</idLote>%s</envEvento>`, nfeNamespace, eventoXML)
+	envelope := montarEnvelopeSOAPGenerico(envLote, "nfeDadosMsg", "NFeRecepcaoEvento4")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.urlEvento, bytes.NewReader([]byte(envelope)))
+	if err != nil {
+		return nil, fmt.Errorf("montar requisição HTTP: %w", err)
+	}
+	req.Header.Set("Content-Type", `application/soap+xml; charset=utf-8; action="`+soapActionRecepcaoEvento+`"`)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("comunicar com a SEFAZ: %w", err)
+	}
+	defer res.Body.Close()
+
+	corpo, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("ler resposta da SEFAZ: %w", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("SEFAZ retornou HTTP %d: %s", res.StatusCode, string(corpo))
+	}
+
+	return interpretarRespostaEvento(corpo)
+}
+
+// RespostaEvento é o resultado, já interpretado, do envio de um evento
+// (cancelamento) à SEFAZ.
+type RespostaEvento struct {
+	CStat                 string
+	XMotivo               string
+	Homologado            bool // true só pra cStat 135
+	ProtocoloCancelamento string
+}
+
+// ErrEventoRejeitadoPelaSefaz é retornado quando cStat do evento não é
+// 135 — a SEFAZ não homologou o cancelamento (motivo comum: prazo
+// expirado, mas também pode ser XML malformado ou chave inexistente).
+var ErrEventoRejeitadoPelaSefaz = fmt.Errorf("evento de cancelamento rejeitado pela SEFAZ")
+
+func interpretarRespostaEvento(corpoSOAP []byte) (*RespostaEvento, error) {
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(corpoSOAP); err != nil {
+		return nil, fmt.Errorf("resposta da SEFAZ não é XML válido: %w", err)
+	}
+
+	infEvento := doc.FindElement("//retEvento/infEvento")
+	if infEvento == nil {
+		return nil, fmt.Errorf("resposta da SEFAZ sem <retEvento>/<infEvento> — corpo: %s", string(corpoSOAP))
+	}
+
+	cStat := textoOuVazio(infEvento, "cStat")
+	if cStat == "" {
+		return nil, fmt.Errorf("infEvento sem <cStat>")
+	}
+
+	resposta := &RespostaEvento{
+		CStat:                 cStat,
+		XMotivo:               textoOuVazio(infEvento, "xMotivo"),
+		ProtocoloCancelamento: textoOuVazio(infEvento, "nProt"),
+	}
+
+	if cStat != CStatEventoHomologado {
+		return resposta, fmt.Errorf("%w: cStat=%s xMotivo=%q", ErrEventoRejeitadoPelaSefaz, cStat, resposta.XMotivo)
+	}
+	resposta.Homologado = true
+
+	return resposta, nil
 }
 
 // TODO(contingência offline, tpEmis=9): quando o link com a SEFAZ cair

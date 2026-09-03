@@ -18,8 +18,13 @@ func NewMockProvider() *MockProvider {
 
 func (m *MockProvider) Emitir(_ context.Context, payment PaymentInfo) (NFCeResult, error) {
 	return NFCeResult{
-		ChaveAcesso: fmt.Sprintf("MOCK%d%s", time.Now().UnixNano(), payment.PaymentID.String()[:8]),
-		NumeroNota:  fmt.Sprintf("%06d", time.Now().UnixNano()%1_000_000),
-		LinkDANFE:   fmt.Sprintf("https://mock-integradora.invalid/danfe/%s", payment.PaymentID),
+		ChaveAcesso:          fmt.Sprintf("MOCK%d%s", time.Now().UnixNano(), payment.PaymentID.String()[:8]),
+		NumeroNota:           fmt.Sprintf("%06d", time.Now().UnixNano()%1_000_000),
+		LinkDANFE:            fmt.Sprintf("https://mock-integradora.invalid/danfe/%s", payment.PaymentID),
+		ProtocoloAutorizacao: fmt.Sprintf("MOCKPROT%d", time.Now().UnixNano()),
 	}, nil
+}
+
+func (m *MockProvider) Cancelar(_ context.Context, _ CancelamentoInfo) (CancelamentoResultado, error) {
+	return CancelamentoResultado{ProtocoloCancelamento: fmt.Sprintf("MOCKCANC%d", time.Now().UnixNano())}, nil
 }

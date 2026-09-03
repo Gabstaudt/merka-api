@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -313,10 +314,11 @@ func (f *fakeTenantRepo) ProximoNumeroNFCe(_ context.Context, _ uuid.UUID) (int,
 }
 
 type fiscalReceiptEmitida struct {
-	paymentID   uuid.UUID
-	chaveAcesso string
-	numeroNota  string
-	linkDanfe   string
+	paymentID            uuid.UUID
+	chaveAcesso          string
+	numeroNota           string
+	linkDanfe            string
+	protocoloAutorizacao string
 }
 
 type fakeFiscalReceiptRepo struct {
@@ -324,8 +326,8 @@ type fakeFiscalReceiptRepo struct {
 	falhas   []string
 }
 
-func (f *fakeFiscalReceiptRepo) RegistrarEmitida(_ context.Context, _, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe string) error {
-	f.emitidas = append(f.emitidas, fiscalReceiptEmitida{paymentID, chaveAcesso, numeroNota, linkDanfe})
+func (f *fakeFiscalReceiptRepo) RegistrarEmitida(_ context.Context, _, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe, protocoloAutorizacao string) error {
+	f.emitidas = append(f.emitidas, fiscalReceiptEmitida{paymentID, chaveAcesso, numeroNota, linkDanfe, protocoloAutorizacao})
 	return nil
 }
 func (f *fakeFiscalReceiptRepo) RegistrarFalha(_ context.Context, _, _ uuid.UUID, motivo string) error {
@@ -334,4 +336,20 @@ func (f *fakeFiscalReceiptRepo) RegistrarFalha(_ context.Context, _, _ uuid.UUID
 }
 func (f *fakeFiscalReceiptRepo) Listar(_ context.Context, _ uuid.UUID, _ repository.FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error) {
 	return nil, 0, nil
+}
+func (f *fakeFiscalReceiptRepo) BuscarPorPaymentID(_ context.Context, _, paymentID uuid.UUID) (*domain.FiscalReceipt, error) {
+	for _, e := range f.emitidas {
+		if e.paymentID == paymentID {
+			chave, numero, protocolo := e.chaveAcesso, e.numeroNota, e.protocoloAutorizacao
+			agora := time.Now()
+			return &domain.FiscalReceipt{
+				PaymentID: paymentID, Emitida: true, EmitidaEm: &agora,
+				ChaveAcesso: &chave, NumeroNota: &numero, ProtocoloAutorizacao: &protocolo,
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("fiscal_receipt não encontrado pro payment %s", paymentID)
+}
+func (f *fakeFiscalReceiptRepo) RegistrarCancelamento(_ context.Context, _, _ uuid.UUID, _, _ string) error {
+	return nil
 }

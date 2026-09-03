@@ -58,6 +58,14 @@ func (p *FiscalProviderSefazDireto) SubstituirURLParaTeste(url string) {
 	p.sefazClient.httpClient = http.DefaultClient
 }
 
+// SubstituirURLEventoParaTeste é o equivalente de SubstituirURLParaTeste
+// pro webservice de eventos (RecepcaoEvento4) — usado pelos testes de
+// cancelamento (US-22). Nunca deve ser chamado fora de teste.
+func (p *FiscalProviderSefazDireto) SubstituirURLEventoParaTeste(url string) {
+	p.sefazClient.urlEvento = url
+	p.sefazClient.httpClient = http.DefaultClient
+}
+
 func (p *FiscalProviderSefazDireto) Emitir(ctx context.Context, payment PaymentInfo) (NFCeResult, error) {
 	if len(payment.Itens) == 0 {
 		return NFCeResult{}, fmt.Errorf("nenhum item resolvido pro payment %s — não é possível montar a NFC-e", payment.PaymentID)
@@ -103,8 +111,41 @@ func (p *FiscalProviderSefazDireto) Emitir(ctx context.Context, payment PaymentI
 	}
 
 	return NFCeResult{
-		ChaveAcesso: resposta.ChaveAcesso,
-		NumeroNota:  fmt.Sprintf("%d", payment.NumeroNF),
-		LinkDANFE:   "", // DANFE Simplificado (impressão local) — geração de PDF/link fica fora do escopo desta etapa
+		ChaveAcesso:          resposta.ChaveAcesso,
+		NumeroNota:           fmt.Sprintf("%d", payment.NumeroNF),
+		LinkDANFE:            "", // DANFE Simplificado (impressão local) — geração de PDF/link fica fora do escopo desta etapa
+		ProtocoloAutorizacao: resposta.NumeroProtocolo,
 	}, nil
+}
+
+// Cancelar monta, assina e envia o evento de cancelamento (US-22) —
+// prazo/estado da nota já foram checados por quem chama
+// (usecase.CancelarNotaFiscal); aqui só a comunicação com a SEFAZ.
+func (p *FiscalProviderSefazDireto) Cancelar(ctx context.Context, info CancelamentoInfo) (CancelamentoResultado, error) {
+	doc, err := MontarEventoCancelamento(EventoCancelamentoInput{
+		Ambiente:             p.ambiente,
+		ChaveAcesso:          info.ChaveAcesso,
+		CNPJEmitente:         info.CNPJEmitente,
+		ProtocoloAutorizacao: info.ProtocoloAutorizacao,
+		Justificativa:        info.Justificativa,
+		DataEvento:           time.Now(),
+	})
+	if err != nil {
+		return CancelamentoResultado{}, fmt.Errorf("montar evento de cancelamento: %w", err)
+	}
+
+	infEvento := doc.FindElement("//infEvento")
+	if infEvento == nil {
+		return CancelamentoResultado{}, fmt.Errorf("infEvento não encontrado no XML montado")
+	}
+	if _, err := AssinarElemento(p.certificado, infEvento, "Id"); err != nil {
+		return CancelamentoResultado{}, fmt.Errorf("assinar evento de cancelamento: %w", err)
+	}
+
+	resposta, err := p.sefazClient.EnviarEventoCancelamento(ctx, doc)
+	if err != nil {
+		return CancelamentoResultado{}, fmt.Errorf("enviar evento de cancelamento pra SEFAZ: %w", err)
+	}
+
+	return CancelamentoResultado{ProtocoloCancelamento: resposta.ProtocoloCancelamento}, nil
 }

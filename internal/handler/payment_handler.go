@@ -8,6 +8,7 @@ import (
 
 	"github.com/merka/api/internal/audit"
 	"github.com/merka/api/internal/domain"
+	"github.com/merka/api/internal/fiscal"
 	"github.com/merka/api/internal/middleware"
 	"github.com/merka/api/internal/repository"
 	"github.com/merka/api/internal/repository/postgres"
@@ -16,20 +17,28 @@ import (
 )
 
 type PaymentHandler struct {
-	fecharPagamento *usecase.FecharPagamento
-	auditWriter     *audit.Writer
-	hub             *ws.Hub
-	permRepo        repository.PermissionRepository
+	fecharPagamento    *usecase.FecharPagamento
+	cancelarNotaFiscal *usecase.CancelarNotaFiscal
+	auditWriter        *audit.Writer
+	hub                *ws.Hub
+	permRepo           repository.PermissionRepository
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository) *PaymentHandler {
-	return &PaymentHandler{fecharPagamento: fecharPagamento, auditWriter: auditWriter, hub: hub, permRepo: permRepo}
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, cancelarNotaFiscal *usecase.CancelarNotaFiscal, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository) *PaymentHandler {
+	return &PaymentHandler{
+		fecharPagamento:    fecharPagamento,
+		cancelarNotaFiscal: cancelarNotaFiscal,
+		auditWriter:        auditWriter,
+		hub:                hub,
+		permRepo:           permRepo,
+	}
 }
 
 // RegistrarRotas conecta as rotas de pagamento no router informado —
 // espera-se que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
 func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/pagamentos", middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
+	router.Post("/pagamentos/:id/cancelar-nota", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.CancelarNota)
 }
 
 type pagamentoParcialRequest struct {
@@ -116,4 +125,64 @@ func (h *PaymentHandler) Fechar(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fecharPagamentoResponse{PaymentIDs: paymentIDs})
+}
+
+type cancelarNotaRequest struct {
+	Justificativa string `json:"justificativa"`
+}
+
+// CancelarNota godoc
+// @Summary      Cancelar NFC-e já emitida, dentro do prazo (US-22)
+// @Description  Cancela a NFC-e vinculada ao pagamento informado, junto à SEFAZ (integração direta, ver CLAUDE.md). Só permitido dentro do prazo regulamentar a partir da emissão — passado esse prazo a SEFAZ rejeita o evento, sem reenvio automático. Restrito a Caixa/Gestor/Admin Super.
+// @Tags         pagamentos
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string               true  "id do payment"
+// @Param        body  body      cancelarNotaRequest  true  "Justificativa do cancelamento (15-255 caracteres, exigido pela SEFAZ)"
+// @Success      204
+// @Failure      400   {object}  map[string]string  "justificativa inválida, nota não emitida, já cancelada, ou prazo de cancelamento expirado"
+// @Failure      401   {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      404   {object}  map[string]string  "nenhuma nota fiscal encontrada pra esse pagamento"
+// @Failure      500   {object}  map[string]string  "erro interno"
+// @Router       /pagamentos/{id}/cancelar-nota [post]
+func (h *PaymentHandler) CancelarNota(c *fiber.Ctx) error {
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	paymentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de payment inválido"})
+	}
+
+	var req cancelarNotaRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+	}
+
+	dadosAuditoria := map[string]any{"payment_id": paymentID, "justificativa": req.Justificativa}
+
+	_, err = audit.Executar(c.UserContext(), h.auditWriter, "cancelar_nota_fiscal", tenantID, userID, dadosAuditoria,
+		func() (struct{}, *uuid.UUID, error) {
+			err := h.cancelarNotaFiscal.Executar(c.UserContext(), tenantID, paymentID, req.Justificativa)
+			return struct{}{}, nil, err
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecase.ErrNotaNaoEncontrada):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "nenhuma nota fiscal encontrada pra esse pagamento"})
+		case errors.Is(err, usecase.ErrNotaNaoEmitida),
+			errors.Is(err, usecase.ErrNotaJaCancelada),
+			errors.Is(err, usecase.ErrPrazoCancelamentoExpirado),
+			errors.Is(err, fiscal.ErrJustificativaCurta):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }

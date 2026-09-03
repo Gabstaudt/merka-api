@@ -82,7 +82,7 @@ func (uc *EmitirNotaFiscal) Executar(ctx context.Context, tenantID, paymentID uu
 		return
 	}
 
-	if regErr := uc.receiptRepo.RegistrarEmitida(ctx, tenantID, paymentID, resultado.ChaveAcesso, resultado.NumeroNota, resultado.LinkDANFE); regErr != nil {
+	if regErr := uc.receiptRepo.RegistrarEmitida(ctx, tenantID, paymentID, resultado.ChaveAcesso, resultado.NumeroNota, resultado.LinkDANFE, resultado.ProtocoloAutorizacao); regErr != nil {
 		log.Printf("fiscal: falha ao gravar fiscal_receipt de sucesso do payment %s: %v", paymentID, regErr)
 	}
 }

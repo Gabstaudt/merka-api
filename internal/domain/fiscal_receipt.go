@@ -31,4 +31,14 @@ type FiscalReceipt struct {
 	LinkDanfe       *string
 	MotivoFalha     *string
 	ProcessadoEm    time.Time
+
+	// Campos de cancelamento (US-22) — ProtocoloAutorizacao é o nProt da
+	// emissão original, exigido pelo evento de cancelamento
+	// (detEvento/nProt); sem ele não é possível montar um cancelamento
+	// válido pra essa nota.
+	ProtocoloAutorizacao  *string
+	Cancelada             bool
+	CanceladaEm           *time.Time
+	MotivoCancelamento    *string
+	ProtocoloCancelamento *string
 }

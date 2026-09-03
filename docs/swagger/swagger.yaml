@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  domain.AuditLogEntry:
+  github_com_merka_api_internal_domain.AuditLogEntry:
     properties:
       acao:
         type: string
@@ -20,7 +20,7 @@ definitions:
       usuarioID:
         type: string
     type: object
-  domain.Comanda:
+  github_com_merka_api_internal_domain.Comanda:
     properties:
       abertaEm:
         type: string
@@ -31,13 +31,13 @@ definitions:
       id:
         type: string
       status:
-        $ref: '#/definitions/domain.StatusComanda'
+        $ref: '#/definitions/github_com_merka_api_internal_domain.StatusComanda'
       tableID:
         type: string
       tenantID:
         type: string
     type: object
-  domain.Discount:
+  github_com_merka_api_internal_domain.Discount:
     properties:
       aplicadoEm:
         type: string
@@ -52,13 +52,17 @@ definitions:
       tenantID:
         type: string
       tipo:
-        $ref: '#/definitions/domain.TipoDesconto'
+        $ref: '#/definitions/github_com_merka_api_internal_domain.TipoDesconto'
       valor:
         format: float64
         type: number
     type: object
-  domain.FiscalReceipt:
+  github_com_merka_api_internal_domain.FiscalReceipt:
     properties:
+      cancelada:
+        type: boolean
+      canceladaEm:
+        type: string
       chaveAcesso:
         type: string
       documento:
@@ -77,6 +81,8 @@ definitions:
         type: boolean
       linkDanfe:
         type: string
+      motivoCancelamento:
+        type: string
       motivoFalha:
         type: string
       numeroNota:
@@ -87,6 +93,15 @@ definitions:
         type: boolean
       processadoEm:
         type: string
+      protocoloAutorizacao:
+        description: |-
+          Campos de cancelamento (US-22) — ProtocoloAutorizacao é o nProt da
+          emissão original, exigido pelo evento de cancelamento
+          (detEvento/nProt); sem ele não é possível montar um cancelamento
+          válido pra essa nota.
+        type: string
+      protocoloCancelamento:
+        type: string
       tenantID:
         type: string
       tipoDocumento:
@@ -96,7 +111,7 @@ definitions:
       whatsappEnviado:
         type: boolean
     type: object
-  domain.OrderItem:
+  github_com_merka_api_internal_domain.OrderItem:
     properties:
       comandaID:
         type: string
@@ -126,14 +141,14 @@ definitions:
           original nunca é apagado, só marcado.
         type: string
       status:
-        $ref: '#/definitions/domain.StatusOrderItem'
+        $ref: '#/definitions/github_com_merka_api_internal_domain.StatusOrderItem'
       tenantID:
         type: string
       valor:
         format: float64
         type: number
     type: object
-  domain.Permissao:
+  github_com_merka_api_internal_domain.Permissao:
     enum:
     - criar_usuario
     - criar_perfil
@@ -151,6 +166,7 @@ definitions:
     - entregar_comanda
     - cadastrar_produto
     - configurar_preco_peso
+    - cancelar_nota_fiscal
     type: string
     x-enum-varnames:
     - PermissaoCriarUsuario
@@ -169,22 +185,32 @@ definitions:
     - PermissaoEntregarComanda
     - PermissaoCadastrarProduto
     - PermissaoConfigurarPrecoPeso
-  domain.PermissionCatalogo:
+    - PermissaoCancelarNotaFiscal
+  github_com_merka_api_internal_domain.PermissionCatalogo:
     properties:
       chave:
-        $ref: '#/definitions/domain.Permissao'
+        $ref: '#/definitions/github_com_merka_api_internal_domain.Permissao'
       descricao:
         type: string
       id:
         type: string
     type: object
-  domain.Product:
+  github_com_merka_api_internal_domain.Product:
     properties:
       ativo:
         type: boolean
       categoryID:
         type: string
+      cfop:
+        type: string
       id:
+        type: string
+      ncm:
+        description: |-
+          NCM/CFOP: obrigatórios para emitir NFC-e via SEFAZ direta (ETAPA 4,
+          ver CLAUDE.md) — nil em produtos cadastrados antes da migration
+          0014. internal/fiscal.FiscalProviderSefazDireto recusa emitir nota
+          com item sem esses dados em vez de estimar um valor.
         type: string
       nome:
         type: string
@@ -203,9 +229,9 @@ definitions:
       tenantID:
         type: string
       tipoCobranca:
-        $ref: '#/definitions/domain.TipoCobranca'
+        $ref: '#/definitions/github_com_merka_api_internal_domain.TipoCobranca'
     type: object
-  domain.RelatorioVendas:
+  github_com_merka_api_internal_domain.RelatorioVendas:
     properties:
       fim:
         description: RFC3339 — fim do período (exclusive)
@@ -217,17 +243,17 @@ definitions:
         type: string
       porFormaPagamento:
         items:
-          $ref: '#/definitions/domain.VendaPorFormaPagamento'
+          $ref: '#/definitions/github_com_merka_api_internal_domain.VendaPorFormaPagamento'
         type: array
       porProduto:
         items:
-          $ref: '#/definitions/domain.VendaPorProduto'
+          $ref: '#/definitions/github_com_merka_api_internal_domain.VendaPorProduto'
         type: array
       totalGeral:
         format: float64
         type: number
     type: object
-  domain.Role:
+  github_com_merka_api_internal_domain.Role:
     properties:
       id:
         type: string
@@ -238,7 +264,7 @@ definitions:
       tenantID:
         type: string
     type: object
-  domain.StatusComanda:
+  github_com_merka_api_internal_domain.StatusComanda:
     enum:
     - disponivel
     - em_uso
@@ -250,7 +276,7 @@ definitions:
     - StatusEmUso
     - StatusPaga
     - StatusCancelada
-  domain.StatusOrderItem:
+  github_com_merka_api_internal_domain.StatusOrderItem:
     enum:
     - ativo
     - removido
@@ -260,7 +286,7 @@ definitions:
     - StatusItemAtivo
     - StatusItemRemovido
     - StatusItemEstornado
-  domain.TipoCobranca:
+  github_com_merka_api_internal_domain.TipoCobranca:
     enum:
     - unitario
     - peso
@@ -268,7 +294,7 @@ definitions:
     x-enum-varnames:
     - TipoCobrancaUnitario
     - TipoCobrancaPeso
-  domain.TipoDesconto:
+  github_com_merka_api_internal_domain.TipoDesconto:
     enum:
     - valor_fixo
     - percentual
@@ -276,7 +302,7 @@ definitions:
     x-enum-varnames:
     - DescontoValorFixo
     - DescontoPercentual
-  domain.VendaPorFormaPagamento:
+  github_com_merka_api_internal_domain.VendaPorFormaPagamento:
     properties:
       metodo:
         type: string
@@ -284,7 +310,7 @@ definitions:
         format: float64
         type: number
     type: object
-  domain.VendaPorProduto:
+  github_com_merka_api_internal_domain.VendaPorProduto:
     properties:
       categoriaNome:
         type: string
@@ -298,12 +324,12 @@ definitions:
         format: float64
         type: number
     type: object
-  handler.abrirComandaRequest:
+  internal_handler.abrirComandaRequest:
     properties:
       table_id:
         type: string
     type: object
-  handler.aplicarDescontoRequest:
+  internal_handler.aplicarDescontoRequest:
     properties:
       motivo:
         type: string
@@ -312,11 +338,11 @@ definitions:
       valor:
         type: number
     type: object
-  handler.auditoriaResponse:
+  internal_handler.auditoriaResponse:
     properties:
       itens:
         items:
-          $ref: '#/definitions/domain.AuditLogEntry'
+          $ref: '#/definitions/github_com_merka_api_internal_domain.AuditLogEntry'
         type: array
       limit:
         type: integer
@@ -325,7 +351,7 @@ definitions:
       total:
         type: integer
     type: object
-  handler.cadastrarProdutoRequest:
+  internal_handler.cadastrarProdutoRequest:
     properties:
       category_id:
         type: string
@@ -340,19 +366,24 @@ definitions:
       tipo_cobranca:
         type: string
     type: object
-  handler.cancelarComandaRequest:
+  internal_handler.cancelarComandaRequest:
     properties:
       motivo:
         type: string
     type: object
-  handler.configurarPrecoPesoRequest:
+  internal_handler.cancelarNotaRequest:
+    properties:
+      justificativa:
+        type: string
+    type: object
+  internal_handler.configurarPrecoPesoRequest:
     properties:
       preco_por_kg:
         type: number
       tara_kg:
         type: number
     type: object
-  handler.criarPerfilRequest:
+  internal_handler.criarPerfilRequest:
     properties:
       nome:
         type: string
@@ -361,7 +392,7 @@ definitions:
           type: string
         type: array
     type: object
-  handler.criarUsuarioRequest:
+  internal_handler.criarUsuarioRequest:
     properties:
       login:
         type: string
@@ -372,14 +403,14 @@ definitions:
       senha:
         type: string
     type: object
-  handler.editarPermissoesPerfilRequest:
+  internal_handler.editarPermissoesPerfilRequest:
     properties:
       permissoes:
         items:
           type: string
         type: array
     type: object
-  handler.fecharPagamentoRequest:
+  internal_handler.fecharPagamentoRequest:
     properties:
       comanda_ids:
         items:
@@ -387,45 +418,45 @@ definitions:
         type: array
       pagamentos:
         items:
-          $ref: '#/definitions/handler.pagamentoParcialRequest'
+          $ref: '#/definitions/internal_handler.pagamentoParcialRequest'
         type: array
     type: object
-  handler.fecharPagamentoResponse:
+  internal_handler.fecharPagamentoResponse:
     properties:
       payment_ids:
         items:
           type: string
         type: array
     type: object
-  handler.lancarItemRequest:
+  internal_handler.lancarItemRequest:
     properties:
       product_id:
         type: string
       quantidade:
         type: number
     type: object
-  handler.loginRequest:
+  internal_handler.loginRequest:
     properties:
       login:
         type: string
       senha:
         type: string
     type: object
-  handler.loginResponse:
+  internal_handler.loginResponse:
     properties:
       token:
         type: string
     type: object
-  handler.motivoRequest:
+  internal_handler.motivoRequest:
     properties:
       motivo:
         type: string
     type: object
-  handler.notasFiscaisResponse:
+  internal_handler.notasFiscaisResponse:
     properties:
       itens:
         items:
-          $ref: '#/definitions/domain.FiscalReceipt'
+          $ref: '#/definitions/github_com_merka_api_internal_domain.FiscalReceipt'
         type: array
       limit:
         type: integer
@@ -434,26 +465,26 @@ definitions:
       total:
         type: integer
     type: object
-  handler.pagamentoParcialRequest:
+  internal_handler.pagamentoParcialRequest:
     properties:
       metodo:
         type: string
       valor:
         type: number
     type: object
-  handler.registrarPesoRequest:
+  internal_handler.registrarPesoRequest:
     properties:
       peso_bruto:
         type: number
       product_id:
         type: string
     type: object
-  handler.transferirMesaRequest:
+  internal_handler.transferirMesaRequest:
     properties:
       table_id:
         type: string
     type: object
-  handler.usuarioResponse:
+  internal_handler.usuarioResponse:
     properties:
       ativo:
         type: boolean
@@ -514,7 +545,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handler.auditoriaResponse'
+            $ref: '#/definitions/internal_handler.auditoriaResponse'
         "400":
           description: parâmetro inválido
           schema:
@@ -556,14 +587,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.loginRequest'
+          $ref: '#/definitions/internal_handler.loginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handler.loginResponse'
+            $ref: '#/definitions/internal_handler.loginResponse'
         "400":
           description: corpo da requisição inválido
           schema:
@@ -597,14 +628,14 @@ paths:
         in: body
         name: body
         schema:
-          $ref: '#/definitions/handler.abrirComandaRequest'
+          $ref: '#/definitions/internal_handler.abrirComandaRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Comanda'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
         "401":
           description: token ausente, inválido ou expirado
           schema:
@@ -651,7 +682,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Comanda'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
         "401":
           description: token ausente, inválido ou expirado
           schema:
@@ -699,14 +730,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.cancelarComandaRequest'
+          $ref: '#/definitions/internal_handler.cancelarComandaRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Comanda'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
         "400":
           description: motivo obrigatório
           schema:
@@ -766,14 +797,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.aplicarDescontoRequest'
+          $ref: '#/definitions/internal_handler.aplicarDescontoRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.Discount'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Discount'
         "400":
           description: motivo obrigatório ou tipo inválido
           schema:
@@ -827,14 +858,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.lancarItemRequest'
+          $ref: '#/definitions/internal_handler.lancarItemRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.OrderItem'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.OrderItem'
         "401":
           description: token ausente, inválido ou expirado
           schema:
@@ -882,14 +913,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.transferirMesaRequest'
+          $ref: '#/definitions/internal_handler.transferirMesaRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Comanda'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
         "401":
           description: token ausente, inválido ou expirado
           schema:
@@ -938,14 +969,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.registrarPesoRequest'
+          $ref: '#/definitions/internal_handler.registrarPesoRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.OrderItem'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.OrderItem'
         "401":
           description: token ausente, inválido ou expirado
           schema:
@@ -1007,7 +1038,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handler.notasFiscaisResponse'
+            $ref: '#/definitions/internal_handler.notasFiscaisResponse'
         "400":
           description: parâmetro inválido
           schema:
@@ -1055,14 +1086,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.motivoRequest'
+          $ref: '#/definitions/internal_handler.motivoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.OrderItem'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.OrderItem'
         "400":
           description: motivo obrigatório
           schema:
@@ -1122,14 +1153,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.motivoRequest'
+          $ref: '#/definitions/internal_handler.motivoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.OrderItem'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.OrderItem'
         "400":
           description: motivo obrigatório
           schema:
@@ -1187,14 +1218,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.fecharPagamentoRequest'
+          $ref: '#/definitions/internal_handler.fecharPagamentoRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handler.fecharPagamentoResponse'
+            $ref: '#/definitions/internal_handler.fecharPagamentoResponse'
         "400":
           description: corpo inválido, método inválido ou soma dos pagamentos não
             bate com o total
@@ -1225,6 +1256,62 @@ paths:
       summary: Fechar pagamento de uma ou mais comandas (US-13 + US-14)
       tags:
       - pagamentos
+  /pagamentos/{id}/cancelar-nota:
+    post:
+      consumes:
+      - application/json
+      description: Cancela a NFC-e vinculada ao pagamento informado, junto à SEFAZ
+        (integração direta, ver CLAUDE.md). Só permitido dentro do prazo regulamentar
+        a partir da emissão — passado esse prazo a SEFAZ rejeita o evento, sem reenvio
+        automático. Restrito a Caixa/Gestor/Admin Super.
+      parameters:
+      - description: id do payment
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Justificativa do cancelamento (15-255 caracteres, exigido pela
+          SEFAZ)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.cancelarNotaRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: justificativa inválida, nota não emitida, já cancelada, ou
+            prazo de cancelamento expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: nenhuma nota fiscal encontrada pra esse pagamento
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cancelar NFC-e já emitida, dentro do prazo (US-22)
+      tags:
+      - pagamentos
   /perfis:
     get:
       description: Admin Super e Gestor podem ver — ver comentário em RegistrarRotas
@@ -1236,7 +1323,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Role'
+              $ref: '#/definitions/github_com_merka_api_internal_domain.Role'
             type: array
         "401":
           description: token ausente, inválido ou expirado
@@ -1273,14 +1360,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.criarPerfilRequest'
+          $ref: '#/definitions/internal_handler.criarPerfilRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.Role'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Role'
         "400":
           description: nome obrigatório ou permissão inexistente no catálogo
           schema:
@@ -1334,14 +1421,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.editarPermissoesPerfilRequest'
+          $ref: '#/definitions/internal_handler.editarPermissoesPerfilRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Role'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Role'
         "400":
           description: permissão inexistente no catálogo
           schema:
@@ -1394,7 +1481,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.PermissionCatalogo'
+              $ref: '#/definitions/github_com_merka_api_internal_domain.PermissionCatalogo'
             type: array
         "401":
           description: token ausente, inválido ou expirado
@@ -1430,7 +1517,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/domain.Product'
+              $ref: '#/definitions/github_com_merka_api_internal_domain.Product'
             type: array
         "401":
           description: token ausente, inválido ou expirado
@@ -1462,14 +1549,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.cadastrarProdutoRequest'
+          $ref: '#/definitions/internal_handler.cadastrarProdutoRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/domain.Product'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Product'
         "400":
           description: campo obrigatório ausente ou tipo_cobranca inválido
           schema:
@@ -1517,14 +1604,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.configurarPrecoPesoRequest'
+          $ref: '#/definitions/internal_handler.configurarPrecoPesoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.Product'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Product'
         "400":
           description: nada para atualizar
           schema:
@@ -1588,7 +1675,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/domain.RelatorioVendas'
+            $ref: '#/definitions/github_com_merka_api_internal_domain.RelatorioVendas'
         "400":
           description: periodo ou data_referencia inválidos
           schema:
@@ -1631,14 +1718,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/handler.criarUsuarioRequest'
+          $ref: '#/definitions/internal_handler.criarUsuarioRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/handler.usuarioResponse'
+            $ref: '#/definitions/internal_handler.usuarioResponse'
         "400":
           description: campo obrigatório ausente ou senha curta
           schema:

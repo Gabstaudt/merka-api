@@ -78,7 +78,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.auditoriaResponse"
+                            "$ref": "#/definitions/internal_handler.auditoriaResponse"
                         }
                     },
                     "400": {
@@ -140,7 +140,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.loginRequest"
+                            "$ref": "#/definitions/internal_handler.loginRequest"
                         }
                     }
                 ],
@@ -148,7 +148,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.loginResponse"
+                            "$ref": "#/definitions/internal_handler.loginResponse"
                         }
                     },
                     "400": {
@@ -203,7 +203,7 @@ const docTemplate = `{
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/handler.abrirComandaRequest"
+                            "$ref": "#/definitions/internal_handler.abrirComandaRequest"
                         }
                     }
                 ],
@@ -211,7 +211,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Comanda"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
                         }
                     },
                     "401": {
@@ -281,7 +281,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Comanda"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
                         }
                     },
                     "401": {
@@ -355,7 +355,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.cancelarComandaRequest"
+                            "$ref": "#/definitions/internal_handler.cancelarComandaRequest"
                         }
                     }
                 ],
@@ -363,7 +363,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Comanda"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
                         }
                     },
                     "400": {
@@ -455,7 +455,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.aplicarDescontoRequest"
+                            "$ref": "#/definitions/internal_handler.aplicarDescontoRequest"
                         }
                     }
                 ],
@@ -463,7 +463,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Discount"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Discount"
                         }
                     },
                     "400": {
@@ -546,7 +546,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.lancarItemRequest"
+                            "$ref": "#/definitions/internal_handler.lancarItemRequest"
                         }
                     }
                 ],
@@ -554,7 +554,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "401": {
@@ -628,7 +628,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.transferirMesaRequest"
+                            "$ref": "#/definitions/internal_handler.transferirMesaRequest"
                         }
                     }
                 ],
@@ -636,7 +636,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Comanda"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
                         }
                     },
                     "401": {
@@ -710,7 +710,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.registrarPesoRequest"
+                            "$ref": "#/definitions/internal_handler.registrarPesoRequest"
                         }
                     }
                 ],
@@ -718,7 +718,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "401": {
@@ -811,7 +811,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.notasFiscaisResponse"
+                            "$ref": "#/definitions/internal_handler.notasFiscaisResponse"
                         }
                     },
                     "400": {
@@ -885,7 +885,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.motivoRequest"
+                            "$ref": "#/definitions/internal_handler.motivoRequest"
                         }
                     }
                 ],
@@ -893,7 +893,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "400": {
@@ -985,7 +985,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.motivoRequest"
+                            "$ref": "#/definitions/internal_handler.motivoRequest"
                         }
                     }
                 ],
@@ -993,7 +993,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "400": {
@@ -1078,7 +1078,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.fecharPagamentoRequest"
+                            "$ref": "#/definitions/internal_handler.fecharPagamentoRequest"
                         }
                     }
                 ],
@@ -1086,7 +1086,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handler.fecharPagamentoResponse"
+                            "$ref": "#/definitions/internal_handler.fecharPagamentoResponse"
                         }
                     },
                     "400": {
@@ -1128,6 +1128,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/pagamentos/{id}/cancelar-nota": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancela a NFC-e vinculada ao pagamento informado, junto à SEFAZ (integração direta, ver CLAUDE.md). Só permitido dentro do prazo regulamentar a partir da emissão — passado esse prazo a SEFAZ rejeita o evento, sem reenvio automático. Restrito a Caixa/Gestor/Admin Super.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pagamentos"
+                ],
+                "summary": "Cancelar NFC-e já emitida, dentro do prazo (US-22)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id do payment",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Justificativa do cancelamento (15-255 caracteres, exigido pela SEFAZ)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.cancelarNotaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "justificativa inválida, nota não emitida, já cancelada, ou prazo de cancelamento expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "nenhuma nota fiscal encontrada pra esse pagamento",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/perfis": {
             "get": {
                 "security": [
@@ -1149,7 +1228,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Role"
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
                             }
                         }
                     },
@@ -1206,7 +1285,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.criarPerfilRequest"
+                            "$ref": "#/definitions/internal_handler.criarPerfilRequest"
                         }
                     }
                 ],
@@ -1214,7 +1293,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Role"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
                         }
                     },
                     "400": {
@@ -1297,7 +1376,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.editarPermissoesPerfilRequest"
+                            "$ref": "#/definitions/internal_handler.editarPermissoesPerfilRequest"
                         }
                     }
                 ],
@@ -1305,7 +1384,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Role"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
                         }
                     },
                     "400": {
@@ -1386,7 +1465,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.PermissionCatalogo"
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.PermissionCatalogo"
                             }
                         }
                     },
@@ -1441,7 +1520,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/domain.Product"
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
                             }
                         }
                     },
@@ -1489,7 +1568,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.cadastrarProdutoRequest"
+                            "$ref": "#/definitions/internal_handler.cadastrarProdutoRequest"
                         }
                     }
                 ],
@@ -1497,7 +1576,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Product"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
                         }
                     },
                     "400": {
@@ -1571,7 +1650,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.configurarPrecoPesoRequest"
+                            "$ref": "#/definitions/internal_handler.configurarPrecoPesoRequest"
                         }
                     }
                 ],
@@ -1579,7 +1658,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Product"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
                         }
                     },
                     "400": {
@@ -1674,7 +1753,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.RelatorioVendas"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.RelatorioVendas"
                         }
                     },
                     "400": {
@@ -1741,7 +1820,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.criarUsuarioRequest"
+                            "$ref": "#/definitions/internal_handler.criarUsuarioRequest"
                         }
                     }
                 ],
@@ -1749,7 +1828,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handler.usuarioResponse"
+                            "$ref": "#/definitions/internal_handler.usuarioResponse"
                         }
                     },
                     "400": {
@@ -1875,7 +1954,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "domain.AuditLogEntry": {
+        "github_com_merka_api_internal_domain.AuditLogEntry": {
             "type": "object",
             "properties": {
                 "acao": {
@@ -1905,7 +1984,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Comanda": {
+        "github_com_merka_api_internal_domain.Comanda": {
             "type": "object",
             "properties": {
                 "abertaEm": {
@@ -1921,7 +2000,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/domain.StatusComanda"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.StatusComanda"
                 },
                 "tableID": {
                     "type": "string"
@@ -1931,7 +2010,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Discount": {
+        "github_com_merka_api_internal_domain.Discount": {
             "type": "object",
             "properties": {
                 "aplicadoEm": {
@@ -1953,7 +2032,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tipo": {
-                    "$ref": "#/definitions/domain.TipoDesconto"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.TipoDesconto"
                 },
                 "valor": {
                     "type": "number",
@@ -1961,9 +2040,15 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.FiscalReceipt": {
+        "github_com_merka_api_internal_domain.FiscalReceipt": {
             "type": "object",
             "properties": {
+                "cancelada": {
+                    "type": "boolean"
+                },
+                "canceladaEm": {
+                    "type": "string"
+                },
                 "chaveAcesso": {
                     "type": "string"
                 },
@@ -1991,6 +2076,9 @@ const docTemplate = `{
                 "linkDanfe": {
                     "type": "string"
                 },
+                "motivoCancelamento": {
+                    "type": "string"
+                },
                 "motivoFalha": {
                     "type": "string"
                 },
@@ -2004,6 +2092,13 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "processadoEm": {
+                    "type": "string"
+                },
+                "protocoloAutorizacao": {
+                    "description": "Campos de cancelamento (US-22) — ProtocoloAutorizacao é o nProt da\nemissão original, exigido pelo evento de cancelamento\n(detEvento/nProt); sem ele não é possível montar um cancelamento\nválido pra essa nota.",
+                    "type": "string"
+                },
+                "protocoloCancelamento": {
                     "type": "string"
                 },
                 "tenantID": {
@@ -2020,7 +2115,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.OrderItem": {
+        "github_com_merka_api_internal_domain.OrderItem": {
             "type": "object",
             "properties": {
                 "comandaID": {
@@ -2059,7 +2154,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/domain.StatusOrderItem"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.StatusOrderItem"
                 },
                 "tenantID": {
                     "type": "string"
@@ -2070,7 +2165,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Permissao": {
+        "github_com_merka_api_internal_domain.Permissao": {
             "type": "string",
             "enum": [
                 "criar_usuario",
@@ -2088,7 +2183,8 @@ const docTemplate = `{
                 "processar_pagamento",
                 "entregar_comanda",
                 "cadastrar_produto",
-                "configurar_preco_peso"
+                "configurar_preco_peso",
+                "cancelar_nota_fiscal"
             ],
             "x-enum-varnames": [
                 "PermissaoCriarUsuario",
@@ -2106,14 +2202,15 @@ const docTemplate = `{
                 "PermissaoProcessarPagamento",
                 "PermissaoEntregarComanda",
                 "PermissaoCadastrarProduto",
-                "PermissaoConfigurarPrecoPeso"
+                "PermissaoConfigurarPrecoPeso",
+                "PermissaoCancelarNotaFiscal"
             ]
         },
-        "domain.PermissionCatalogo": {
+        "github_com_merka_api_internal_domain.PermissionCatalogo": {
             "type": "object",
             "properties": {
                 "chave": {
-                    "$ref": "#/definitions/domain.Permissao"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.Permissao"
                 },
                 "descricao": {
                     "type": "string"
@@ -2123,7 +2220,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Product": {
+        "github_com_merka_api_internal_domain.Product": {
             "type": "object",
             "properties": {
                 "ativo": {
@@ -2132,7 +2229,14 @@ const docTemplate = `{
                 "categoryID": {
                     "type": "string"
                 },
+                "cfop": {
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "ncm": {
+                    "description": "NCM/CFOP: obrigatórios para emitir NFC-e via SEFAZ direta (ETAPA 4,\nver CLAUDE.md) — nil em produtos cadastrados antes da migration\n0014. internal/fiscal.FiscalProviderSefazDireto recusa emitir nota\ncom item sem esses dados em vez de estimar um valor.",
                     "type": "string"
                 },
                 "nome": {
@@ -2157,11 +2261,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tipoCobranca": {
-                    "$ref": "#/definitions/domain.TipoCobranca"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.TipoCobranca"
                 }
             }
         },
-        "domain.RelatorioVendas": {
+        "github_com_merka_api_internal_domain.RelatorioVendas": {
             "type": "object",
             "properties": {
                 "fim": {
@@ -2178,13 +2282,13 @@ const docTemplate = `{
                 "porFormaPagamento": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.VendaPorFormaPagamento"
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.VendaPorFormaPagamento"
                     }
                 },
                 "porProduto": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.VendaPorProduto"
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.VendaPorProduto"
                     }
                 },
                 "totalGeral": {
@@ -2193,7 +2297,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Role": {
+        "github_com_merka_api_internal_domain.Role": {
             "type": "object",
             "properties": {
                 "id": {
@@ -2210,7 +2314,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.StatusComanda": {
+        "github_com_merka_api_internal_domain.StatusComanda": {
             "type": "string",
             "enum": [
                 "disponivel",
@@ -2225,7 +2329,7 @@ const docTemplate = `{
                 "StatusCancelada"
             ]
         },
-        "domain.StatusOrderItem": {
+        "github_com_merka_api_internal_domain.StatusOrderItem": {
             "type": "string",
             "enum": [
                 "ativo",
@@ -2238,7 +2342,7 @@ const docTemplate = `{
                 "StatusItemEstornado"
             ]
         },
-        "domain.TipoCobranca": {
+        "github_com_merka_api_internal_domain.TipoCobranca": {
             "type": "string",
             "enum": [
                 "unitario",
@@ -2249,7 +2353,7 @@ const docTemplate = `{
                 "TipoCobrancaPeso"
             ]
         },
-        "domain.TipoDesconto": {
+        "github_com_merka_api_internal_domain.TipoDesconto": {
             "type": "string",
             "enum": [
                 "valor_fixo",
@@ -2260,7 +2364,7 @@ const docTemplate = `{
                 "DescontoPercentual"
             ]
         },
-        "domain.VendaPorFormaPagamento": {
+        "github_com_merka_api_internal_domain.VendaPorFormaPagamento": {
             "type": "object",
             "properties": {
                 "metodo": {
@@ -2272,7 +2376,7 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.VendaPorProduto": {
+        "github_com_merka_api_internal_domain.VendaPorProduto": {
             "type": "object",
             "properties": {
                 "categoriaNome": {
@@ -2293,7 +2397,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.abrirComandaRequest": {
+        "internal_handler.abrirComandaRequest": {
             "type": "object",
             "properties": {
                 "table_id": {
@@ -2301,7 +2405,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.aplicarDescontoRequest": {
+        "internal_handler.aplicarDescontoRequest": {
             "type": "object",
             "properties": {
                 "motivo": {
@@ -2315,13 +2419,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.auditoriaResponse": {
+        "internal_handler.auditoriaResponse": {
             "type": "object",
             "properties": {
                 "itens": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.AuditLogEntry"
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.AuditLogEntry"
                     }
                 },
                 "limit": {
@@ -2335,7 +2439,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.cadastrarProdutoRequest": {
+        "internal_handler.cadastrarProdutoRequest": {
             "type": "object",
             "properties": {
                 "category_id": {
@@ -2358,7 +2462,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.cancelarComandaRequest": {
+        "internal_handler.cancelarComandaRequest": {
             "type": "object",
             "properties": {
                 "motivo": {
@@ -2366,7 +2470,15 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.configurarPrecoPesoRequest": {
+        "internal_handler.cancelarNotaRequest": {
+            "type": "object",
+            "properties": {
+                "justificativa": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.configurarPrecoPesoRequest": {
             "type": "object",
             "properties": {
                 "preco_por_kg": {
@@ -2377,7 +2489,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.criarPerfilRequest": {
+        "internal_handler.criarPerfilRequest": {
             "type": "object",
             "properties": {
                 "nome": {
@@ -2391,7 +2503,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.criarUsuarioRequest": {
+        "internal_handler.criarUsuarioRequest": {
             "type": "object",
             "properties": {
                 "login": {
@@ -2408,7 +2520,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.editarPermissoesPerfilRequest": {
+        "internal_handler.editarPermissoesPerfilRequest": {
             "type": "object",
             "properties": {
                 "permissoes": {
@@ -2419,7 +2531,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.fecharPagamentoRequest": {
+        "internal_handler.fecharPagamentoRequest": {
             "type": "object",
             "properties": {
                 "comanda_ids": {
@@ -2431,12 +2543,12 @@ const docTemplate = `{
                 "pagamentos": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.pagamentoParcialRequest"
+                        "$ref": "#/definitions/internal_handler.pagamentoParcialRequest"
                     }
                 }
             }
         },
-        "handler.fecharPagamentoResponse": {
+        "internal_handler.fecharPagamentoResponse": {
             "type": "object",
             "properties": {
                 "payment_ids": {
@@ -2447,7 +2559,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.lancarItemRequest": {
+        "internal_handler.lancarItemRequest": {
             "type": "object",
             "properties": {
                 "product_id": {
@@ -2458,7 +2570,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.loginRequest": {
+        "internal_handler.loginRequest": {
             "type": "object",
             "properties": {
                 "login": {
@@ -2469,7 +2581,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.loginResponse": {
+        "internal_handler.loginResponse": {
             "type": "object",
             "properties": {
                 "token": {
@@ -2477,7 +2589,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.motivoRequest": {
+        "internal_handler.motivoRequest": {
             "type": "object",
             "properties": {
                 "motivo": {
@@ -2485,13 +2597,13 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.notasFiscaisResponse": {
+        "internal_handler.notasFiscaisResponse": {
             "type": "object",
             "properties": {
                 "itens": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.FiscalReceipt"
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.FiscalReceipt"
                     }
                 },
                 "limit": {
@@ -2505,7 +2617,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.pagamentoParcialRequest": {
+        "internal_handler.pagamentoParcialRequest": {
             "type": "object",
             "properties": {
                 "metodo": {
@@ -2516,7 +2628,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.registrarPesoRequest": {
+        "internal_handler.registrarPesoRequest": {
             "type": "object",
             "properties": {
                 "peso_bruto": {
@@ -2527,7 +2639,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.transferirMesaRequest": {
+        "internal_handler.transferirMesaRequest": {
             "type": "object",
             "properties": {
                 "table_id": {
@@ -2535,7 +2647,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.usuarioResponse": {
+        "internal_handler.usuarioResponse": {
             "type": "object",
             "properties": {
                 "ativo": {

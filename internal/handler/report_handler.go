@@ -114,9 +114,10 @@ func (h *ReportHandler) NotasFiscais(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
 	}
 
+	limit, offset := paginacaoQuery(c.QueryInt("limit", limitPadrao), c.QueryInt("offset", 0))
 	filtro := usecase.FiltroNotasFiscais{
-		Limit:  c.QueryInt("limit", 50),
-		Offset: c.QueryInt("offset", 0),
+		Limit:  limit,
+		Offset: offset,
 	}
 
 	if v := c.Query("data_inicio"); v != "" {

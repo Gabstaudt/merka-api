@@ -172,6 +172,12 @@ func (h *ComandaHandler) RegistrarPeso(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
 	}
+	if req.ProductID == uuid.Nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "product_id é obrigatório"})
+	}
+	if req.PesoBruto <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "peso_bruto precisa ser maior que zero"})
+	}
 
 	dadosAuditoria := map[string]any{
 		"product_id": req.ProductID,
@@ -228,6 +234,12 @@ func (h *ComandaHandler) LancarItem(c *fiber.Ctx) error {
 	var req lancarItemRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+	}
+	if req.ProductID == uuid.Nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "product_id é obrigatório"})
+	}
+	if req.Quantidade <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "quantidade precisa ser maior que zero"})
 	}
 
 	dadosAuditoria := map[string]any{
@@ -479,7 +491,7 @@ func (h *ComandaHandler) AplicarDesconto(c *fiber.Ctx) error {
 	)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrMotivoObrigatorio), errors.Is(err, usecase.ErrTipoDescontoInvalido):
+		case errors.Is(err, usecase.ErrMotivoObrigatorio), errors.Is(err, usecase.ErrTipoDescontoInvalido), errors.Is(err, usecase.ErrValorDescontoInvalido):
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
 		case errors.Is(err, usecase.ErrDescontoResultaEmNegativo):
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})

@@ -169,7 +169,9 @@ func (h *ProductHandler) ConfigurarPrecoPeso(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "produto não encontrado"})
 		case errors.Is(err, usecase.ErrProdutoNaoEhDeTipoPeso):
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
-		case errors.Is(err, usecase.ErrNadaParaAtualizar):
+		case errors.Is(err, usecase.ErrNadaParaAtualizar),
+			errors.Is(err, usecase.ErrPrecoPorKgInvalido),
+			errors.Is(err, usecase.ErrTaraKgInvalida):
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
 		default:
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})

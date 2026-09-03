@@ -221,7 +221,11 @@ type fakeOrderItemRepo struct {
 	itens []domain.OrderItem
 }
 
-func (f *fakeOrderItemRepo) Criar(_ context.Context, _ *domain.OrderItem) error { return nil }
+func (f *fakeOrderItemRepo) Criar(_ context.Context, item *domain.OrderItem) error {
+	item.ID = uuid.New()
+	f.itens = append(f.itens, *item)
+	return nil
+}
 func (f *fakeOrderItemRepo) SomarTotalAtivo(_ context.Context, _ uuid.UUID, comandaIDs []uuid.UUID) (float64, error) {
 	var total float64
 	for _, item := range f.itens {
@@ -237,7 +241,15 @@ func (f *fakeOrderItemRepo) BuscarPorID(_ context.Context, _, _ uuid.UUID) (*dom
 func (f *fakeOrderItemRepo) MarcarStatus(_ context.Context, _ uuid.UUID, _ domain.StatusOrderItem, _ uuid.UUID, _ string) error {
 	return nil
 }
-func (f *fakeOrderItemRepo) RemoverTodosAtivosDaComanda(_ context.Context, _, _ uuid.UUID, _ string) error {
+func (f *fakeOrderItemRepo) RemoverTodosAtivosDaComanda(_ context.Context, comandaID, removidoPor uuid.UUID, motivo string) error {
+	for i := range f.itens {
+		item := &f.itens[i]
+		if item.ComandaID == comandaID && item.Status == domain.StatusItemAtivo {
+			item.Status = domain.StatusItemRemovido
+			item.RemovidoPor = &removidoPor
+			item.MotivoRemocao = &motivo
+		}
+	}
 	return nil
 }
 func (f *fakeOrderItemRepo) ListarAtivosPorComandas(_ context.Context, _ uuid.UUID, comandaIDs []uuid.UUID) ([]domain.OrderItem, error) {

@@ -19,6 +19,14 @@ var ErrProdutoNaoEhDeTipoPeso = errors.New("produto não é do tipo peso — pre
 // foram informados.
 var ErrNadaParaAtualizar = errors.New("informe preco_por_kg e/ou tara_kg")
 
+// ErrPrecoPorKgInvalido/ErrTaraKgInvalida cobrem os valores que, embora
+// informados, não fazem sentido pro negócio — sem essa checagem, um
+// preco_por_kg <= 0 ou negativo passaria direto pro banco.
+var (
+	ErrPrecoPorKgInvalido = errors.New("preco_por_kg precisa ser maior que zero")
+	ErrTaraKgInvalida     = errors.New("tara_kg não pode ser negativa")
+)
+
 // ConfigurarPrecoPeso orquestra o ajuste de preço/kg e tara de um produto
 // já cadastrado (US-20 — Admin Super, Gestor, Caixa ou Balança via
 // permissão "configurar_preco_peso"). Só se aplica a produtos do tipo
@@ -37,6 +45,12 @@ func NewConfigurarPrecoPeso(productRepo repository.ProductRepository, priceHisto
 func (uc *ConfigurarPrecoPeso) Executar(ctx context.Context, tenantID, productID, userID uuid.UUID, novoPrecoPorKg, novaTaraKg *float64) (*domain.Product, error) {
 	if novoPrecoPorKg == nil && novaTaraKg == nil {
 		return nil, ErrNadaParaAtualizar
+	}
+	if novoPrecoPorKg != nil && *novoPrecoPorKg <= 0 {
+		return nil, ErrPrecoPorKgInvalido
+	}
+	if novaTaraKg != nil && *novaTaraKg < 0 {
+		return nil, ErrTaraKgInvalida
 	}
 
 	product, err := uc.productRepo.BuscarPorID(ctx, tenantID, productID)

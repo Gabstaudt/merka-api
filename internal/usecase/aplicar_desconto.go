@@ -19,6 +19,12 @@ var ErrTipoDescontoInvalido = errors.New("tipo de desconto inválido — use val
 // deixaria o total da comanda negativo (US-17).
 var ErrDescontoResultaEmNegativo = errors.New("desconto resultaria em valor negativo")
 
+// ErrValorDescontoInvalido é retornado quando valor <= 0 — um valor
+// negativo NÃO seria pego pela checagem de "total ficaria negativo"
+// (pelo contrário: reduziria o desconto aplicado, aumentando o total),
+// então precisa de validação própria.
+var ErrValorDescontoInvalido = errors.New("valor do desconto precisa ser maior que zero")
+
 // AplicarDesconto orquestra o desconto manual (US-17 — Gestor, Admin
 // Super ou Caixa via permissão "aplicar_desconto"): valor fixo ou
 // percentual sobre o total atual da comanda, sempre com motivo, nunca
@@ -38,6 +44,9 @@ func (uc *AplicarDesconto) Executar(ctx context.Context, tenantID, comandaID, us
 	}
 	if tipo != domain.DescontoValorFixo && tipo != domain.DescontoPercentual {
 		return nil, ErrTipoDescontoInvalido
+	}
+	if valor <= 0 {
+		return nil, ErrValorDescontoInvalido
 	}
 
 	total, err := uc.orderItemRepo.SomarTotalAtivo(ctx, tenantID, []uuid.UUID{comandaID})

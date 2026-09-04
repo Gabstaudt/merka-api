@@ -51,11 +51,21 @@ func (r *orderItemRepository) Criar(ctx context.Context, item *domain.OrderItem)
 	return nil
 }
 
+// SomarTotalAtivo soma só os itens ativos lançados NO CICLO ATUAL de uso
+// da comanda (lancado_em >= comandas.aberta_em) — a comanda física é
+// reutilizada indefinidamente (disponivel -> em_uso -> paga -> disponivel,
+// seção 17 do planejamento) e nada marca os order_items de um ciclo
+// anterior como "não conta mais" quando a comanda volta a ficar em_uso.
+// Sem esse filtro, um item já cobrado (e pago) do cliente de ontem
+// continuaria contando no total do cliente de hoje só por calhar de pegar
+// a mesma comanda física — mesmo bug que já existia em discounts, ver
+// discount_repo.go SomarAplicadoPorComandas.
 func (r *orderItemRepository) SomarTotalAtivo(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error) {
 	const query = `
-		SELECT COALESCE(SUM(valor), 0)
-		FROM order_items
-		WHERE tenant_id = $1 AND comanda_id = ANY($2::uuid[]) AND status = 'ativo'
+		SELECT COALESCE(SUM(oi.valor), 0)
+		FROM order_items oi
+		JOIN comandas c ON c.id = oi.comanda_id
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.lancado_em >= c.aberta_em
 	`
 
 	db := connFromCtx(ctx, r.pool)
@@ -113,13 +123,19 @@ func (r *orderItemRepository) MarcarStatus(ctx context.Context, itemID uuid.UUID
 	return nil
 }
 
+// ListarAtivosPorComandas, assim como SomarTotalAtivo, só considera itens
+// do ciclo atual de uso da comanda (ver comentário lá) — usado pela
+// emissão fiscal (ETAPA 4) pra montar o detalhamento item a item; sem esse
+// filtro, um item de um cliente anterior poderia parar na NFC-e de um
+// cliente completamente diferente.
 func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) ([]domain.OrderItem, error) {
 	const query = `
-		SELECT id, tenant_id, comanda_id, product_id, quantidade, peso_kg, valor, status,
-		       lancado_por, lancado_em, removido_por, removido_em, motivo_remocao
-		FROM order_items
-		WHERE tenant_id = $1 AND comanda_id = ANY($2::uuid[]) AND status = 'ativo'
-		ORDER BY lancado_em
+		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
+		       oi.lancado_por, oi.lancado_em, oi.removido_por, oi.removido_em, oi.motivo_remocao
+		FROM order_items oi
+		JOIN comandas c ON c.id = oi.comanda_id
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.lancado_em >= c.aberta_em
+		ORDER BY oi.lancado_em
 	`
 
 	db := connFromCtx(ctx, r.pool)
@@ -149,13 +165,19 @@ func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenan
 	return itens, nil
 }
 
+// ListarPorComanda, assim como SomarTotalAtivo, só devolve itens do ciclo
+// atual de uso da comanda (ver comentário lá) — usado pelo Garçom (tela de
+// comanda aberta); sem esse filtro, o histórico de "removido/estornado"
+// misturaria lançamentos de um cliente completamente diferente que usou a
+// mesma comanda física antes.
 func (r *orderItemRepository) ListarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.OrderItem, error) {
 	const query = `
-		SELECT id, tenant_id, comanda_id, product_id, quantidade, peso_kg, valor, status,
-		       lancado_por, lancado_em, removido_por, removido_em, motivo_remocao
-		FROM order_items
-		WHERE tenant_id = $1 AND comanda_id = $2
-		ORDER BY lancado_em
+		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
+		       oi.lancado_por, oi.lancado_em, oi.removido_por, oi.removido_em, oi.motivo_remocao
+		FROM order_items oi
+		JOIN comandas c ON c.id = oi.comanda_id
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = $2 AND oi.lancado_em >= c.aberta_em
+		ORDER BY oi.lancado_em
 	`
 
 	db := connFromCtx(ctx, r.pool)

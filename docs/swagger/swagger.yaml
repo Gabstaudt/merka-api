@@ -56,6 +56,14 @@ definitions:
       valor:
         format: float64
         type: number
+      valorAplicado:
+        description: |-
+          ValorAplicado é sempre em reais, calculado no momento da aplicação
+          (para desconto percentual, "congela" o valor resultante — não
+          recalcula se a comanda mudar depois). É este campo, não Valor, que
+          o fechamento de caixa abate do total (ver FecharPagamento).
+        format: float64
+        type: number
     type: object
   github_com_merka_api_internal_domain.FiscalReceipt:
     properties:
@@ -434,6 +442,8 @@ definitions:
         items:
           type: string
         type: array
+      documento:
+        type: string
       pagamentos:
         items:
           $ref: '#/definitions/internal_handler.pagamentoParcialRequest'

@@ -66,12 +66,13 @@ func (uc *AplicarDesconto) Executar(ctx context.Context, tenantID, comandaID, us
 	}
 
 	discount := &domain.Discount{
-		TenantID:    tenantID,
-		ComandaID:   comandaID,
-		Tipo:        tipo,
-		Valor:       valor,
-		Motivo:      motivo,
-		AplicadoPor: userID,
+		TenantID:      tenantID,
+		ComandaID:     comandaID,
+		Tipo:          tipo,
+		Valor:         valor,
+		ValorAplicado: valorDesconto,
+		Motivo:        motivo,
+		AplicadoPor:   userID,
 	}
 	if err := uc.discountRepo.Criar(ctx, discount); err != nil {
 		return nil, err

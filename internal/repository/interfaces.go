@@ -311,6 +311,12 @@ type PermissionRepository interface {
 // em si já é auditado via audit_log e via esta própria tabela).
 type DiscountRepository interface {
 	Criar(ctx context.Context, discount *domain.Discount) error
+
+	// SomarAplicadoPorComandas soma valor_aplicado (sempre em reais) de
+	// todos os descontos já gravados nas comandas informadas — usado por
+	// FecharPagamento pra abater do total antes de conferir os pagamentos
+	// parciais informados pelo Caixa.
+	SomarAplicadoPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error)
 }
 
 // AuditLogRepository define o contrato de consulta ao log de auditoria

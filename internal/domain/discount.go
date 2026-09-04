@@ -22,7 +22,12 @@ type Discount struct {
 	ComandaID   uuid.UUID
 	Tipo        TipoDesconto
 	Valor       float64
-	Motivo      string
-	AplicadoPor uuid.UUID
-	AplicadoEm  time.Time
+	// ValorAplicado é sempre em reais, calculado no momento da aplicação
+	// (para desconto percentual, "congela" o valor resultante — não
+	// recalcula se a comanda mudar depois). É este campo, não Valor, que
+	// o fechamento de caixa abate do total (ver FecharPagamento).
+	ValorAplicado float64
+	Motivo        string
+	AplicadoPor   uuid.UUID
+	AplicadoEm    time.Time
 }

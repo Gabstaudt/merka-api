@@ -52,10 +52,13 @@ type pagamentoParcialRequest struct {
 	Valor  float64 `json:"valor"`
 }
 
-// fecharPagamentoRequest é o corpo de POST /pagamentos.
+// fecharPagamentoRequest é o corpo de POST /pagamentos. Documento
+// (CPF/CNPJ, opcional) é usado só quando algum método dispara emissão
+// automática de NFC-e (cartão) — ver usecase.DeveEmitirAutomaticamente.
 type fecharPagamentoRequest struct {
 	ComandaIDs []uuid.UUID               `json:"comanda_ids"`
 	Pagamentos []pagamentoParcialRequest `json:"pagamentos"`
+	Documento  string                    `json:"documento"`
 }
 
 type fecharPagamentoResponse struct {
@@ -108,7 +111,7 @@ func (h *PaymentHandler) Fechar(c *fiber.Ctx) error {
 
 	paymentIDs, err := audit.Executar(c.UserContext(), h.auditWriter, "fechar_pagamento", tenantID, userID, dadosAuditoria,
 		func() ([]uuid.UUID, *uuid.UUID, error) {
-			ids, err := h.fecharPagamento.Executar(c.UserContext(), tenantID, userID, req.ComandaIDs, pagamentos)
+			ids, err := h.fecharPagamento.Executar(c.UserContext(), tenantID, userID, req.ComandaIDs, pagamentos, req.Documento)
 			return ids, comandaAuditoria, err
 		},
 	)

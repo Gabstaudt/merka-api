@@ -2197,6 +2197,11 @@ const docTemplate = `{
                 "valor": {
                     "type": "number",
                     "format": "float64"
+                },
+                "valorAplicado": {
+                    "description": "ValorAplicado é sempre em reais, calculado no momento da aplicação\n(para desconto percentual, \"congela\" o valor resultante — não\nrecalcula se a comanda mudar depois). É este campo, não Valor, que\no fechamento de caixa abate do total (ver FecharPagamento).",
+                    "type": "number",
+                    "format": "float64"
                 }
             }
         },
@@ -2717,6 +2722,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "documento": {
+                    "type": "string"
                 },
                 "pagamentos": {
                     "type": "array",

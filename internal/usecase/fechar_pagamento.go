@@ -49,6 +49,7 @@ type FecharPagamento struct {
 	comandaRepo      repository.ComandaRepository
 	orderItemRepo    repository.OrderItemRepository
 	paymentRepo      repository.PaymentRepository
+	discountRepo     repository.DiscountRepository
 	emitirNotaFiscal *EmitirNotaFiscal
 }
 
@@ -56,17 +57,24 @@ func NewFecharPagamento(
 	comandaRepo repository.ComandaRepository,
 	orderItemRepo repository.OrderItemRepository,
 	paymentRepo repository.PaymentRepository,
+	discountRepo repository.DiscountRepository,
 	emitirNotaFiscal *EmitirNotaFiscal,
 ) *FecharPagamento {
 	return &FecharPagamento{
 		comandaRepo:      comandaRepo,
 		orderItemRepo:    orderItemRepo,
 		paymentRepo:      paymentRepo,
+		discountRepo:     discountRepo,
 		emitirNotaFiscal: emitirNotaFiscal,
 	}
 }
 
-func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor uuid.UUID, comandaIDs []uuid.UUID, pagamentos []PagamentoParcial) ([]uuid.UUID, error) {
+// documento (CPF/CNPJ do cliente, opcional) só é usado quando a emissão
+// automática de NFC-e roda (métodos de cartão — ver
+// DeveEmitirAutomaticamente); passa direto pra
+// EmitirNotaFiscal.ExecutarEmBackground, que já valida o dígito
+// verificador antes de deixar o documento chegar no XML fiscal.
+func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor uuid.UUID, comandaIDs []uuid.UUID, pagamentos []PagamentoParcial, documento string) ([]uuid.UUID, error) {
 	if len(comandaIDs) == 0 {
 		return nil, ErrNenhumaComanda
 	}
@@ -91,7 +99,14 @@ func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor
 	if err != nil {
 		return nil, err
 	}
-	total = domain.ArredondarMoeda(total)
+	descontos, err := uc.discountRepo.SomarAplicadoPorComandas(ctx, tenantID, comandaIDs)
+	if err != nil {
+		return nil, err
+	}
+	total = domain.ArredondarMoeda(total - descontos)
+	if total < 0 {
+		total = 0
+	}
 
 	var somaParcial float64
 	for _, p := range pagamentos {
@@ -120,10 +135,10 @@ func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor
 		// cair pra contingência) pra liberar o cupom pro cliente; uma falha
 		// na emissão (ou queda da SEFAZ) nunca desfaz nem trava um
 		// pagamento já confirmado (ver doc do usecase para o racional
-		// completo). "documento" (CPF/CNPJ) ainda não é capturado no
-		// fechamento — fica vazio até a tela de caixa expor esse campo.
+		// completo). "documento" (CPF/CNPJ) vem do Caixa (ETAPA 2 —
+		// Solicitar nota fiscal), opcional.
 		if DeveEmitirAutomaticamente(p.Metodo) {
-			uc.emitirNotaFiscal.ExecutarEmBackground(tenantID, id, p.Metodo, p.Valor, "", comandaIDs)
+			uc.emitirNotaFiscal.ExecutarEmBackground(tenantID, id, p.Metodo, p.Valor, documento, comandaIDs)
 		}
 	}
 

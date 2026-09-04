@@ -97,11 +97,11 @@ func TestFecharPagamento_CartaoEmiteNotaViaSefaz_PontaAPonta(t *testing.T) {
 
 	conexao := novaFakeConexaoTenantProvider()
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(provider, receiptRepo, tenantRepo, productRepo, orderItemRepo, conexao)
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, &fakeDiscountRepo{}, emitirNotaFiscal)
 
 	paymentIDs, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
 		{Metodo: "credito", Valor: 39.95},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("FecharPagamento.Executar: %v", err)
 	}
@@ -154,11 +154,11 @@ func TestFecharPagamento_DinheiroNaoEmiteNota(t *testing.T) {
 	receiptRepo := &fakeFiscalReceiptRepo{}
 
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(nil, receiptRepo, fakeTenantRepoCompleta(1), &fakeProductRepo{}, orderItemRepo, nil)
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, emitirNotaFiscal)
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, &fakeDiscountRepo{}, emitirNotaFiscal)
 
 	if _, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
 		{Metodo: "dinheiro", Valor: 20},
-	}); err != nil {
+	}, ""); err != nil {
 		t.Fatalf("FecharPagamento.Executar: %v", err)
 	}
 
@@ -304,6 +304,29 @@ type fakePaymentRepo struct{}
 
 func (f *fakePaymentRepo) CriarPagamento(_ context.Context, _ uuid.UUID, _ string, _ float64, _ uuid.UUID, _ []uuid.UUID) (uuid.UUID, error) {
 	return uuid.New(), nil
+}
+
+// fakeDiscountRepo simula descontos já aplicados por comanda — usado por
+// FecharPagamento pra abater do total (ETAPA 2, US-17). O default (nil
+// map) soma zero pra toda comanda, igual não ter desconto nenhum.
+type fakeDiscountRepo struct {
+	aplicadoPorComanda map[uuid.UUID]float64
+}
+
+func (f *fakeDiscountRepo) Criar(_ context.Context, discount *domain.Discount) error {
+	if f.aplicadoPorComanda == nil {
+		f.aplicadoPorComanda = map[uuid.UUID]float64{}
+	}
+	f.aplicadoPorComanda[discount.ComandaID] += discount.ValorAplicado
+	return nil
+}
+
+func (f *fakeDiscountRepo) SomarAplicadoPorComandas(_ context.Context, _ uuid.UUID, comandaIDs []uuid.UUID) (float64, error) {
+	var total float64
+	for _, id := range comandaIDs {
+		total += f.aplicadoPorComanda[id]
+	}
+	return total, nil
 }
 
 type fakeTenantRepo struct {

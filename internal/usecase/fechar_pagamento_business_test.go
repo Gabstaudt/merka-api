@@ -40,12 +40,12 @@ func TestFecharPagamento_ValoresMistosBatem(t *testing.T) {
 	orderItemRepo := &fakeOrderItemRepo{itens: []domain.OrderItem{
 		{ID: uuid.New(), TenantID: tenantID, ComandaID: comandaID, Valor: 100, Status: domain.StatusItemAtivo},
 	}}
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, novoEmitirNotaFiscalNaoUsado())
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, &fakeDiscountRepo{}, novoEmitirNotaFiscalNaoUsado())
 
 	paymentIDs, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
 		{Metodo: "dinheiro", Valor: 60},
 		{Metodo: "pix", Valor: 40},
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("Executar: %v", err)
 	}
@@ -67,12 +67,12 @@ func TestFecharPagamento_ValoresMistosNaoBatem(t *testing.T) {
 	orderItemRepo := &fakeOrderItemRepo{itens: []domain.OrderItem{
 		{ID: uuid.New(), TenantID: tenantID, ComandaID: comandaID, Valor: 100, Status: domain.StatusItemAtivo},
 	}}
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, novoEmitirNotaFiscalNaoUsado())
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, &fakeDiscountRepo{}, novoEmitirNotaFiscalNaoUsado())
 
 	_, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
 		{Metodo: "dinheiro", Valor: 60},
 		{Metodo: "pix", Valor: 30}, // soma 90, total é 100 — não bate
-	})
+	}, "")
 	if !errors.Is(err, usecase.ErrValorNaoBate) {
 		t.Fatalf("erro = %v, want ErrValorNaoBate", err)
 	}
@@ -97,11 +97,11 @@ func TestFecharPagamento_SomaMultiplasComandas(t *testing.T) {
 		// item removido não deve entrar na soma
 		{ID: uuid.New(), TenantID: tenantID, ComandaID: comanda2, Valor: 999, Status: domain.StatusItemRemovido},
 	}}
-	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, novoEmitirNotaFiscalNaoUsado())
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, &fakeDiscountRepo{}, novoEmitirNotaFiscalNaoUsado())
 
 	paymentIDs, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comanda1, comanda2}, []usecase.PagamentoParcial{
 		{Metodo: "dinheiro", Valor: 100}, // 70 + 30, das duas comandas somadas
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("Executar: %v", err)
 	}
@@ -110,5 +110,53 @@ func TestFecharPagamento_SomaMultiplasComandas(t *testing.T) {
 	}
 	if comandaRepo.comandas[comanda1].Status != domain.StatusPaga || comandaRepo.comandas[comanda2].Status != domain.StatusPaga {
 		t.Errorf("as duas comandas deveriam estar pagas")
+	}
+}
+
+// TestFecharPagamento_AbateDescontoAplicado confirma a correção da ETAPA
+// 2 (US-17): antes, um desconto gravado por AplicarDesconto nunca reduzia
+// o total cobrado no fechamento — o Caixa não conseguia usar desconto de
+// jeito nenhum, porque a soma dos pagamentos parciais tinha que bater com
+// o total SEM desconto. Agora FecharPagamento abate discounts.valor_aplicado
+// antes de conferir os pagamentos.
+func TestFecharPagamento_AbateDescontoAplicado(t *testing.T) {
+	tenantID := uuid.New()
+	comandaID := uuid.New()
+
+	comandaRepo := &fakeComandaRepo{comandas: map[uuid.UUID]*domain.Comanda{
+		comandaID: {ID: comandaID, TenantID: tenantID, Status: domain.StatusEmUso},
+	}}
+	orderItemRepo := &fakeOrderItemRepo{itens: []domain.OrderItem{
+		{ID: uuid.New(), TenantID: tenantID, ComandaID: comandaID, Valor: 100, Status: domain.StatusItemAtivo},
+	}}
+	discountRepo := &fakeDiscountRepo{aplicadoPorComanda: map[uuid.UUID]float64{comandaID: 15}}
+	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, discountRepo, novoEmitirNotaFiscalNaoUsado())
+
+	// total dos itens é 100, mas com 15 de desconto já aplicado o
+	// fechamento deveria aceitar 85 — não 100.
+	paymentIDs, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
+		{Metodo: "dinheiro", Valor: 85},
+	}, "")
+	if err != nil {
+		t.Fatalf("Executar: %v", err)
+	}
+	if len(paymentIDs) != 1 {
+		t.Fatalf("esperava 1 payment, got %d", len(paymentIDs))
+	}
+
+	// conferência inversa: pagar os 100 cheios (ignorando o desconto)
+	// agora deveria falhar, não mais ser aceito por coincidência.
+	comandaID2 := uuid.New()
+	comandaRepo.comandas[comandaID2] = &domain.Comanda{ID: comandaID2, TenantID: tenantID, Status: domain.StatusEmUso}
+	orderItemRepo.itens = append(orderItemRepo.itens, domain.OrderItem{
+		ID: uuid.New(), TenantID: tenantID, ComandaID: comandaID2, Valor: 100, Status: domain.StatusItemAtivo,
+	})
+	discountRepo.aplicadoPorComanda[comandaID2] = 15
+
+	_, err = fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID2}, []usecase.PagamentoParcial{
+		{Metodo: "dinheiro", Valor: 100},
+	}, "")
+	if !errors.Is(err, usecase.ErrValorNaoBate) {
+		t.Fatalf("erro = %v, want ErrValorNaoBate (o desconto deveria ter sido abatido do total)", err)
 	}
 }

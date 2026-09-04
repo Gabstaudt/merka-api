@@ -42,6 +42,24 @@ func (r *fiscalReceiptRepository) RegistrarEmitida(ctx context.Context, tenantID
 	return nil
 }
 
+// RegistrarContingencia grava uma NFC-e gerada e assinada em
+// contingência offline (Passo 6 ETAPA B) — emitida=true (documento fiscal
+// válido), modo_emissao='contingencia_pendente', sem protocolo_autorizacao
+// ainda (só a retransmissão da ETAPA C preenche isso).
+func (r *fiscalReceiptRepository) RegistrarContingencia(ctx context.Context, tenantID, paymentID uuid.UUID, chaveAcesso, numeroNota, xmlAssinado string) error {
+	const query = `
+		INSERT INTO fiscal_receipts (tenant_id, payment_id, tipo_documento, emitida, emitida_em, chave_acesso, numero_nota, modo_emissao, xml_assinado)
+		VALUES ($1, $2, 'nfce', true, $3, $4, $5, 'contingencia_pendente', $6)
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	if _, err := db.Exec(ctx, query, tenantID, paymentID, time.Now(), chaveAcesso, numeroNota, xmlAssinado); err != nil {
+		return fmt.Errorf("gravar fiscal_receipt (contingência): %w", err)
+	}
+
+	return nil
+}
+
 // BuscarPorPaymentID busca o fiscal_receipt de um payment (US-22).
 func (r *fiscalReceiptRepository) BuscarPorPaymentID(ctx context.Context, tenantID, paymentID uuid.UUID) (*domain.FiscalReceipt, error) {
 	const query = `

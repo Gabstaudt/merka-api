@@ -9,6 +9,21 @@ import (
 	"github.com/merka/api/internal/domain"
 )
 
+// ConexaoTenantProvider monta um context.Context com uma conexão Postgres
+// PRÓPRIA (não a da requisição HTTP corrente) e app.tenant_id já
+// configurado nela — necessário pra trabalho que precisa sobreviver ao
+// fim de uma requisição (ex: emissão fiscal em background, Passo 6 ETAPA
+// B: "não bloquear o caixa esperando a SEFAZ"). A conexão da requisição
+// (ver internal/middleware/tenant.go) é liberada de volta ao pool assim
+// que o handler HTTP retorna — reusar esse mesmo *context.Context numa
+// goroutine que sobrevive à resposta usaria uma conexão já liberada
+// (ou, pior, silenciosamente devolvida a outra requisição concorrente).
+// Quem chama Contexto deve chamar a função de liberação devolvida quando
+// terminar (defer).
+type ConexaoTenantProvider interface {
+	Contexto(ctx context.Context, tenantID uuid.UUID) (context.Context, func(), error)
+}
+
 // ComandaRepository define o contrato de persistência para comandas.
 // Implementação concreta fica em repository/postgres — usecases dependem
 // apenas desta interface.
@@ -182,6 +197,15 @@ type FiscalReceiptRepository interface {
 	// protocoloAutorizacao é o nProt devolvido pela SEFAZ — necessário
 	// pra um cancelamento futuro dessa nota (US-22).
 	RegistrarEmitida(ctx context.Context, tenantID, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe, protocoloAutorizacao string) error
+
+	// RegistrarContingencia grava uma NFC-e gerada e assinada em
+	// contingência offline (Passo 6 ETAPA B, tpEmis=9) — emitida=true (é
+	// um documento fiscal válido, o cupom sai normalmente), mas
+	// modo_emissao='contingencia_pendente' e protocolo_autorizacao vazio
+	// até a retransmissão (ETAPA C) confirmar. xmlAssinado guarda o XML
+	// exato gerado, pra retransmitir sem remontar (remontar geraria uma
+	// chave de acesso diferente da já impressa no cupom).
+	RegistrarContingencia(ctx context.Context, tenantID, paymentID uuid.UUID, chaveAcesso, numeroNota, xmlAssinado string) error
 
 	// RegistrarFalha grava uma tentativa de emissão que falhou —
 	// emitida=false, nunca é silenciada: fica visível para Admin/Gestor

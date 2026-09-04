@@ -35,7 +35,10 @@ var ErrAssinaturaInvalida = errors.New("assinatura XML-DSig inválida")
 
 // AssinarElemento assina o elemento XML informado com XML-DSig —
 // enveloped signature, RSA-SHA256, canonicalização C14N 1.0 inclusiva —
-// e devolve o mesmo elemento com <Signature> anexado como último filho.
+// e devolve o mesmo elemento; <Signature> é anexado como último filho do
+// PAI do elemento (irmão dele), conforme o schema NFe/NFCe — chame só
+// depois de já ter inserido todo elemento irmão que deva aparecer antes
+// de <Signature> na ordem do schema (ex: <infNFeSupl>).
 //
 // idAttr é o nome do atributo usado como URI de referência da assinatura
 // (NFe/NFCe usam "Id" no elemento raiz assinado, ex:
@@ -54,6 +57,19 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 	idValue := el.SelectAttrValue(idAttr, "")
 	if idValue == "" {
 		return nil, fmt.Errorf("elemento não tem atributo %q — obrigatório para referenciar a assinatura", idAttr)
+	}
+	// <Signature> é IRMÃO do elemento assinado no schema NFe (ex:
+	// <NFe><infNFe>...</infNFe><Signature>...</Signature></NFe>, nunca
+	// aninhado dentro de <infNFe>) — mesmo padrão em <evento>/<infEvento>.
+	// Achado tarde (ETAPA B, ao inserir <infNFeSupl> no mesmo nível):
+	// versões anteriores anexavam <Signature> como filho de `el`, o que
+	// teria sido rejeitado pela SEFAZ por schema inválido em qualquer
+	// envio real (os testes daqui não pegam isso porque
+	// VerificarAssinatura validava a mesma estrutura, autoconsistente,
+	// não a conformidade com o schema oficial).
+	pai := el.Parent()
+	if pai == nil {
+		return nil, fmt.Errorf("elemento a assinar precisa ter um elemento pai (<Signature> é anexado como irmão, não como filho)")
 	}
 
 	canonicalizer := dsig.MakeC14N10RecCanonicalizer()
@@ -75,7 +91,7 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 	// diferente do que a verificação vai ver depois (com o SignedInfo já
 	// dentro do documento). Assinar "no lugar certo" evita essa
 	// assimetria.
-	signature := el.CreateElement("ds:Signature")
+	signature := pai.CreateElement("ds:Signature")
 	signature.CreateAttr("xmlns:ds", xmldsigNamespace)
 
 	signedInfo := signature.CreateElement("ds:SignedInfo")
@@ -127,9 +143,13 @@ func AssinarElemento(cert *Certificado, el *etree.Element, idAttr string) (*etre
 // informado (nunca confia no certificado embutido no próprio XML — quem
 // chama decide em qual certificado confiar).
 func VerificarAssinatura(el *etree.Element, idAttr string, certConfiavel *x509.Certificate) error {
-	sig := ultimoFilhoComTag(el, "Signature")
+	pai := el.Parent()
+	if pai == nil {
+		return fmt.Errorf("%w: elemento sem pai — <Signature> é esperado como irmão, não como filho", ErrAssinaturaInvalida)
+	}
+	sig := ultimoFilhoComTag(pai, "Signature")
 	if sig == nil {
-		return fmt.Errorf("%w: elemento não contém <Signature>", ErrAssinaturaInvalida)
+		return fmt.Errorf("%w: elemento irmão <Signature> não encontrado", ErrAssinaturaInvalida)
 	}
 
 	signedInfo := ultimoFilhoComTag(sig, "SignedInfo")
@@ -155,16 +175,13 @@ func VerificarAssinatura(el *etree.Element, idAttr string, certConfiavel *x509.C
 
 	canonicalizer := dsig.MakeC14N10RecCanonicalizer()
 
-	// Recalcula o digest do conteúdo — remove <Signature> temporariamente
-	// do próprio elemento (em vez de canonicalizar uma cópia desanexada
-	// via el.Copy()) porque C14N inclusivo precisa dos namespaces
-	// herdados dos ancestrais (ex: infNFe filho de NFe xmlns="..."); uma
-	// cópia desanexada perde essa referência e o digest bateria errado
-	// mesmo com uma assinatura válida. Restaura o filho antes de sair,
-	// por qualquer caminho — nunca deixa o elemento do caller mutado.
-	el.RemoveChild(sig)
+	// Recalcula o digest do conteúdo — canonicaliza `el` diretamente, no
+	// próprio documento (não uma cópia desanexada via el.Copy(), que
+	// perderia os namespaces herdados dos ancestrais que o C14N inclusivo
+	// precisa, ex: infNFe filho de NFe xmlns="..."). Diferente da versão
+	// anterior, não precisa mais remover/restaurar <Signature> — ela é
+	// irmã de `el`, nunca esteve dentro dele.
 	canonicalEl, canonErr := canonicalizer.Canonicalize(el)
-	el.AddChild(sig)
 	if canonErr != nil {
 		return fmt.Errorf("canonicalizar elemento pra verificar digest: %w", canonErr)
 	}

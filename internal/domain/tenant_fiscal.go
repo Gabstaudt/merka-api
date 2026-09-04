@@ -16,4 +16,10 @@ type DadosFiscaisTenant struct {
 	Municipio         *string
 	UF                *string
 	CEP               *string
+
+	// Campos de QR-Code (migration 0019) — obrigatórios pra NFC-e sempre
+	// (não só em contingência).
+	QRCodeURLConsulta *string
+	QRCodeCSCID       *string
+	QRCodeCSC         *string
 }

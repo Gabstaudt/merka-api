@@ -151,6 +151,22 @@ func TestMontarNFCe_AssinaturaIntegrada(t *testing.T) {
 	if err := VerificarAssinatura(assinado, "Id", cert); err != nil {
 		t.Fatalf("VerificarAssinatura: %v", err)
 	}
+
+	// Confere a posição de <Signature> no schema real: irmã de <infNFe>,
+	// ambas filhas de <NFe> — nunca aninhada dentro de <infNFe> (ver
+	// comentário em AssinarElemento sobre o bug que isso corrigiu).
+	nfe := doc.FindElement("//NFe")
+	if nfe == nil {
+		t.Fatal("elemento raiz <NFe> não encontrado")
+	}
+	filhos := nfe.ChildElements()
+	if len(filhos) != 2 || filhos[0].Tag != "infNFe" || filhos[1].Tag != "Signature" {
+		var tags []string
+		for _, f := range filhos {
+			tags = append(tags, f.Tag)
+		}
+		t.Fatalf("filhos de <NFe> = %v, want [infNFe Signature]", tags)
+	}
 }
 
 // TestMontarNFCe_Validacoes confere as validações de entrada (nenhum

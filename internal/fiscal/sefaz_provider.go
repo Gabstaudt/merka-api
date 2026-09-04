@@ -2,9 +2,12 @@ package fiscal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/beevik/etree"
 )
 
 // FiscalProviderSefazDireto é a implementação real de Provider (ETAPA 4):
@@ -55,7 +58,12 @@ func NovoFiscalProviderSefazDiretoParaTeste(cert *Certificado, ambiente TipoAmbi
 // ser chamado fora de teste.
 func (p *FiscalProviderSefazDireto) SubstituirURLParaTeste(url string) {
 	p.sefazClient.urlAutorizacao = url
-	p.sefazClient.httpClient = http.DefaultClient
+	// Troca só o Transport (mTLS não faz sentido contra um httptest.Server
+	// HTTP puro) — preserva o Timeout já configurado em NovoSefazClient.
+	// Usar http.DefaultClient aqui (como antes) resetava silenciosamente
+	// o timeout, o que quebrava testes de indisponibilidade/contingência
+	// (o client nunca estourava o timeout configurado).
+	p.sefazClient.httpClient = &http.Client{Timeout: p.sefazClient.httpClient.Timeout}
 }
 
 // SubstituirURLEventoParaTeste é o equivalente de SubstituirURLParaTeste
@@ -63,9 +71,18 @@ func (p *FiscalProviderSefazDireto) SubstituirURLParaTeste(url string) {
 // cancelamento (US-22). Nunca deve ser chamado fora de teste.
 func (p *FiscalProviderSefazDireto) SubstituirURLEventoParaTeste(url string) {
 	p.sefazClient.urlEvento = url
-	p.sefazClient.httpClient = http.DefaultClient
+	p.sefazClient.httpClient = &http.Client{Timeout: p.sefazClient.httpClient.Timeout}
 }
 
+// Emitir tenta a emissão normal (tpEmis=1, online, síncrona) primeiro.
+// Se a SEFAZ estiver indisponível (ErrSefazIndisponivel — timeout, rede,
+// HTTP 5xx: ver sefaz_client.go), cai pra contingência offline (Passo 6
+// ETAPA B, NT 2026.002 tpEmis=9): gera e assina uma NFC-e NOVA (chave de
+// acesso própria, com o dígito de tpEmis correto — não reaproveita a
+// chave da tentativa online, que nunca chegou a ser uma nota válida) e
+// devolve sem enviar. Qualquer outro erro (rejeição fiscal, dados
+// inválidos) propaga normalmente — só indisponibilidade aciona
+// contingência.
 func (p *FiscalProviderSefazDireto) Emitir(ctx context.Context, payment PaymentInfo) (NFCeResult, error) {
 	if len(payment.Itens) == 0 {
 		return NFCeResult{}, fmt.Errorf("nenhum item resolvido pro payment %s — não é possível montar a NFC-e", payment.PaymentID)
@@ -74,12 +91,60 @@ func (p *FiscalProviderSefazDireto) Emitir(ctx context.Context, payment PaymentI
 		return NFCeResult{}, fmt.Errorf("dados fiscais do emitente incompletos (CNPJ vazio) — cadastre CNPJ/IE/endereço do tenant antes de emitir")
 	}
 
+	doc, _, err := p.montarEAssinarNFCe(payment, "1")
+	if err != nil {
+		return NFCeResult{}, err
+	}
+
+	resposta, err := p.sefazClient.EnviarNFCe(ctx, doc)
+	if err == nil {
+		return NFCeResult{
+			ChaveAcesso:          resposta.ChaveAcesso,
+			NumeroNota:           fmt.Sprintf("%d", payment.NumeroNF),
+			LinkDANFE:            "", // DANFE Simplificado (impressão local) — geração de PDF/link fica fora do escopo desta etapa
+			ProtocoloAutorizacao: resposta.NumeroProtocolo,
+		}, nil
+	}
+	if !errors.Is(err, ErrSefazIndisponivel) {
+		// Rejeição fiscal ou outro erro de dados — não é caso de
+		// contingência, propaga pro caller tratar como falha de emissão
+		// normal (ver usecase/emitir_nota_fiscal.go).
+		return NFCeResult{}, fmt.Errorf("enviar NFC-e pra SEFAZ: %w", err)
+	}
+
+	// SEFAZ indisponível: gera uma NFC-e NOVA em contingência (chave
+	// própria, tpEmis=9) — não reenvia a tentativa online, que nunca foi
+	// uma nota válida (não foi impressa nem entregue).
+	docContingencia, chaveContingencia, err := p.montarEAssinarNFCe(payment, "9")
+	if err != nil {
+		return NFCeResult{}, fmt.Errorf("montar NFC-e em contingência: %w", err)
+	}
+
+	xmlAssinado, err := docContingencia.WriteToString()
+	if err != nil {
+		return NFCeResult{}, fmt.Errorf("serializar XML da NFC-e em contingência: %w", err)
+	}
+
+	return NFCeResult{
+		ChaveAcesso:  chaveContingencia,
+		NumeroNota:   fmt.Sprintf("%d", payment.NumeroNF),
+		Contingencia: true,
+		XMLAssinado:  xmlAssinado,
+	}, nil
+}
+
+// montarEAssinarNFCe monta, adiciona o QR-Code e assina uma NFC-e com o
+// tpEmis informado — reaproveitada tanto pra tentativa online (tpEmis=1)
+// quanto pra contingência (tpEmis=9), que precisam de chave de acesso e
+// QR-Code diferentes (o QR de contingência exige parâmetros e assinatura
+// extras, ver qrcode.go).
+func (p *FiscalProviderSefazDireto) montarEAssinarNFCe(payment PaymentInfo, tpEmis string) (*etree.Document, string, error) {
 	agora := time.Now()
 	cUF := codigoUF(payment.Emitente.UF)
 
-	chaveAcesso, err := GerarChaveAcesso(cUF, agora, payment.Emitente.CNPJ, modeloNFCe, payment.Serie, payment.NumeroNF, "1")
+	chaveAcesso, err := GerarChaveAcesso(cUF, agora, payment.Emitente.CNPJ, modeloNFCe, payment.Serie, payment.NumeroNF, tpEmis)
 	if err != nil {
-		return NFCeResult{}, fmt.Errorf("gerar chave de acesso: %w", err)
+		return nil, "", fmt.Errorf("gerar chave de acesso: %w", err)
 	}
 
 	doc, err := MontarNFCe(NFCeInput{
@@ -92,30 +157,40 @@ func (p *FiscalProviderSefazDireto) Emitir(ctx context.Context, payment PaymentI
 		DocumentoDestinatario: payment.Documento,
 		Itens:                 payment.Itens,
 		Pagamentos:            []PagamentoInput{{Metodo: payment.Metodo, Valor: payment.Valor}},
+		TpEmis:                tpEmis,
 	})
 	if err != nil {
-		return NFCeResult{}, fmt.Errorf("montar XML da NFC-e: %w", err)
+		return nil, "", fmt.Errorf("montar XML da NFC-e: %w", err)
+	}
+
+	var valorTotal float64
+	for _, item := range payment.Itens {
+		valorTotal = arredondarMoeda2(valorTotal + item.ValorTotal)
+	}
+
+	if err := AdicionarQRCode(doc, p.certificado, QRCodeInput{
+		ChaveAcesso:           chaveAcesso,
+		Ambiente:              p.ambiente,
+		TpEmis:                tpEmis,
+		DataEmissao:           agora,
+		ValorTotal:            valorTotal,
+		URLConsulta:           payment.Emitente.QRCodeURLConsulta,
+		CSCID:                 payment.Emitente.QRCodeCSCID,
+		CSC:                   payment.Emitente.QRCodeCSC,
+		DocumentoDestinatario: payment.Documento,
+	}); err != nil {
+		return nil, "", fmt.Errorf("adicionar QR-Code: %w", err)
 	}
 
 	infNFe := doc.FindElement("//infNFe")
 	if infNFe == nil {
-		return NFCeResult{}, fmt.Errorf("infNFe não encontrado no XML montado")
+		return nil, "", fmt.Errorf("infNFe não encontrado no XML montado")
 	}
 	if _, err := AssinarElemento(p.certificado, infNFe, "Id"); err != nil {
-		return NFCeResult{}, fmt.Errorf("assinar NFC-e: %w", err)
+		return nil, "", fmt.Errorf("assinar NFC-e: %w", err)
 	}
 
-	resposta, err := p.sefazClient.EnviarNFCe(ctx, doc)
-	if err != nil {
-		return NFCeResult{}, fmt.Errorf("enviar NFC-e pra SEFAZ: %w", err)
-	}
-
-	return NFCeResult{
-		ChaveAcesso:          resposta.ChaveAcesso,
-		NumeroNota:           fmt.Sprintf("%d", payment.NumeroNF),
-		LinkDANFE:            "", // DANFE Simplificado (impressão local) — geração de PDF/link fica fora do escopo desta etapa
-		ProtocoloAutorizacao: resposta.NumeroProtocolo,
-	}, nil
+	return doc, chaveAcesso, nil
 }
 
 // Cancelar monta, assina e envia o evento de cancelamento (US-22) —

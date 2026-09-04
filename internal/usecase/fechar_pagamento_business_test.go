@@ -27,7 +27,7 @@ func novoEmitirNotaFiscalNaoUsado() *usecase.EmitirNotaFiscal {
 	// nil em tudo: só é seguro porque nenhum destes testes usa método de
 	// pagamento com emissão automática (US-14) — se usassem, isso
 	// panicaria, o que é o comportamento certo pra pegar o teste errado.
-	return usecase.NewEmitirNotaFiscal(nil, nil, nil, nil, nil)
+	return usecase.NewEmitirNotaFiscal(nil, nil, nil, nil, nil, nil)
 }
 
 func TestFecharPagamento_ValoresMistosBatem(t *testing.T) {

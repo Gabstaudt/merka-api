@@ -129,8 +129,10 @@ func TestAssinarElemento_ComFilhos(t *testing.T) {
 		t.Fatalf("AssinarElemento: %v", err)
 	}
 
-	if assinado.SelectElement("Signature") == nil {
-		t.Fatal("elemento assinado não contém <Signature>")
+	// <Signature> é irmã de infNFe (filha do elemento pai), não filha
+	// dele — ver comentário em AssinarElemento.
+	if assinado.Parent().SelectElement("Signature") == nil {
+		t.Fatal("elemento irmão <Signature> não encontrado")
 	}
 
 	if err := VerificarAssinatura(assinado, "Id", cert); err != nil {

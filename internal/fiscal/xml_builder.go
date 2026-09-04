@@ -106,6 +106,12 @@ type EmitenteInfo struct {
 	Municipio       string
 	UF              string // ex: "PA"
 	CEP             string
+
+	// Campos de QR-Code (ver qrcode.go) — obrigatórios pra NFC-e sempre,
+	// não só em contingência.
+	QRCodeURLConsulta string // URL de consulta pública da NFC-e da UF do emitente
+	QRCodeCSCID       string // identificador do Código de Segurança do Contribuinte
+	QRCodeCSC         string // valor do CSC (token emitido pela SEFAZ pra esse CNPJ)
 }
 
 // ItemInput é um order_item já resolvido com os dados do produto (nome,
@@ -149,6 +155,12 @@ type NFCeInput struct {
 	DocumentoDestinatario string // CPF/CNPJ do cliente, opcional (US-14)
 	Itens                 []ItemInput
 	Pagamentos            []PagamentoInput
+
+	// TpEmis: "1" (emissão normal, padrão — usado se vazio) ou "9"
+	// (contingência offline, NT 2026.002/Passo 6 ETAPA B). Nunca outro
+	// valor até aqui — as demais formas de contingência (FS-IA, EPEC,
+	// SVC-AN/RS) não são implementadas.
+	TpEmis string
 }
 
 var (
@@ -225,8 +237,17 @@ func construirIde(infNFe *etree.Element, input NFCeInput) {
 	ide.CreateElement("tpNF").SetText("1")   // saída
 	ide.CreateElement("idDest").SetText("1") // operação interna
 	ide.CreateElement("cMunFG").SetText(input.Emitente.CodigoMunicipio)
-	ide.CreateElement("tpImp").SetText("4")  // DANFE NFC-e
-	ide.CreateElement("tpEmis").SetText("1") // emissão normal — ETAPA 3 trata contingência
+
+	tpEmis := input.TpEmis
+	if tpEmis == "" {
+		tpEmis = "1"
+	}
+	tpImp := "4" // DANFE NFC-e (emissão normal)
+	if tpEmis == "9" {
+		tpImp = "6" // DANFE Simplificado Tipo 2 — obrigatório em contingência offline (NT 2026.002)
+	}
+	ide.CreateElement("tpImp").SetText(tpImp)
+	ide.CreateElement("tpEmis").SetText(tpEmis)
 	ide.CreateElement("cDV").SetText(cDV)
 	ide.CreateElement("tpAmb").SetText(string(input.Ambiente))
 	ide.CreateElement("finNFe").SetText("1")   // normal

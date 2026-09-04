@@ -95,7 +95,8 @@ func TestFecharPagamento_CartaoEmiteNotaViaSefaz_PontaAPonta(t *testing.T) {
 	tenantRepo := fakeTenantRepoCompleta(1)
 	receiptRepo := &fakeFiscalReceiptRepo{}
 
-	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(provider, receiptRepo, tenantRepo, productRepo, orderItemRepo)
+	conexao := novaFakeConexaoTenantProvider()
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(provider, receiptRepo, tenantRepo, productRepo, orderItemRepo, conexao)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 
 	paymentIDs, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
@@ -107,6 +108,10 @@ func TestFecharPagamento_CartaoEmiteNotaViaSefaz_PontaAPonta(t *testing.T) {
 	if len(paymentIDs) != 1 {
 		t.Fatalf("esperava 1 payment, got %d", len(paymentIDs))
 	}
+
+	// ExecutarEmBackground (ETAPA B) roda a emissão fiscal numa goroutine
+	// separada — espera ela terminar antes de conferir fiscal_receipts.
+	conexao.esperar(t)
 
 	if len(receiptRepo.falhas) != 0 {
 		t.Fatalf("emissão falhou (não deveria): %v", receiptRepo.falhas)
@@ -148,7 +153,7 @@ func TestFecharPagamento_DinheiroNaoEmiteNota(t *testing.T) {
 	}}
 	receiptRepo := &fakeFiscalReceiptRepo{}
 
-	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(nil, receiptRepo, fakeTenantRepoCompleta(1), &fakeProductRepo{}, orderItemRepo)
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(nil, receiptRepo, fakeTenantRepoCompleta(1), &fakeProductRepo{}, orderItemRepo, nil)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, &fakePaymentRepo{}, emitirNotaFiscal)
 
 	if _, err := fecharPagamento.Executar(context.Background(), tenantID, uuid.New(), []uuid.UUID{comandaID}, []usecase.PagamentoParcial{
@@ -308,6 +313,7 @@ func fakeTenantRepoCompleta(proximoNumero int) *fakeTenantRepo {
 			RazaoSocial: s("Churrascaria Exemplo LTDA"), CRT: s("1"),
 			Logradouro: s("Travessa Exemplo"), NumeroEndereco: s("123"), Bairro: s("Centro"),
 			CodigoMunicipio: s("1501402"), Municipio: s("Belem"), UF: s("PA"), CEP: s("66000000"),
+			QRCodeURLConsulta: s("https://nfce.svrs.rs.gov.br/consulta"), QRCodeCSCID: s("000001"), QRCodeCSC: s("csc-de-teste"),
 		},
 		proximoNumero: proximoNumero,
 	}
@@ -333,9 +339,17 @@ type fiscalReceiptEmitida struct {
 	protocoloAutorizacao string
 }
 
+type fiscalReceiptContingencia struct {
+	paymentID   uuid.UUID
+	chaveAcesso string
+	numeroNota  string
+	xmlAssinado string
+}
+
 type fakeFiscalReceiptRepo struct {
-	emitidas []fiscalReceiptEmitida
-	falhas   []string
+	emitidas      []fiscalReceiptEmitida
+	falhas        []string
+	contingencias []fiscalReceiptContingencia
 }
 
 func (f *fakeFiscalReceiptRepo) RegistrarEmitida(_ context.Context, _, paymentID uuid.UUID, chaveAcesso, numeroNota, linkDanfe, protocoloAutorizacao string) error {
@@ -344,6 +358,10 @@ func (f *fakeFiscalReceiptRepo) RegistrarEmitida(_ context.Context, _, paymentID
 }
 func (f *fakeFiscalReceiptRepo) RegistrarFalha(_ context.Context, _, _ uuid.UUID, motivo string) error {
 	f.falhas = append(f.falhas, motivo)
+	return nil
+}
+func (f *fakeFiscalReceiptRepo) RegistrarContingencia(_ context.Context, _, paymentID uuid.UUID, chaveAcesso, numeroNota, xmlAssinado string) error {
+	f.contingencias = append(f.contingencias, fiscalReceiptContingencia{paymentID, chaveAcesso, numeroNota, xmlAssinado})
 	return nil
 }
 func (f *fakeFiscalReceiptRepo) Listar(_ context.Context, _ uuid.UUID, _ repository.FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error) {
@@ -364,4 +382,32 @@ func (f *fakeFiscalReceiptRepo) BuscarPorPaymentID(_ context.Context, _, payment
 }
 func (f *fakeFiscalReceiptRepo) RegistrarCancelamento(_ context.Context, _, _ uuid.UUID, _, _ string) error {
 	return nil
+}
+
+// fakeConexaoTenantProvider satisfaz repository.ConexaoTenantProvider sem
+// tocar em Postgres — devolve o próprio ctx recebido (os fakes deste
+// arquivo não usam conexão de verdade) e usa a função de liberação
+// devolvida como sinal de "a goroutine em background terminou", pra que
+// os testes de EmitirNotaFiscal.ExecutarEmBackground (Passo 6 ETAPA B)
+// consigam esperar deterministicamente em vez de arriscar uma corrida
+// entre a asserção e a goroutine.
+type fakeConexaoTenantProvider struct {
+	concluido chan struct{}
+}
+
+func novaFakeConexaoTenantProvider() *fakeConexaoTenantProvider {
+	return &fakeConexaoTenantProvider{concluido: make(chan struct{}, 8)}
+}
+
+func (f *fakeConexaoTenantProvider) Contexto(ctx context.Context, _ uuid.UUID) (context.Context, func(), error) {
+	return ctx, func() { f.concluido <- struct{}{} }, nil
+}
+
+func (f *fakeConexaoTenantProvider) esperar(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.concluido:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout esperando ExecutarEmBackground terminar")
+	}
 }

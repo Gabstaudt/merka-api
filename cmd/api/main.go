@@ -78,6 +78,7 @@ func main() {
 	hub := ws.NewHub()
 
 	tenantRepo := postgres.NewTenantRepository(pool)
+	conexaoTenantProvider := postgres.NewConexaoTenantProvider(pool)
 
 	// FISCAL_PROVIDER=mock (padrão) simula emissão com sucesso, sem falar
 	// com a SEFAZ — bom pra dev local e pra voltar rápido em produção se a
@@ -139,7 +140,7 @@ func main() {
 	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
 	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
 	consultarNotasFiscais := usecase.NewConsultarNotasFiscais(fiscalReceiptRepo)
-	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo)
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo, conexaoTenantProvider)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
 	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
 

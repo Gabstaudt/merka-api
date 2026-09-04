@@ -29,7 +29,8 @@ func NewTenantRepository(pool *pgxpool.Pool) repository.TenantRepository {
 func (r *tenantRepository) BuscarDadosFiscais(ctx context.Context, tenantID uuid.UUID) (*domain.DadosFiscaisTenant, error) {
 	const query = `
 		SELECT cnpj, inscricao_estadual, razao_social, crt,
-		       logradouro, numero_endereco, bairro, codigo_municipio, municipio, uf, cep
+		       logradouro, numero_endereco, bairro, codigo_municipio, municipio, uf, cep,
+		       qrcode_url_consulta, qrcode_csc_id, qrcode_csc
 		FROM tenants
 		WHERE id = $1
 	`
@@ -40,6 +41,7 @@ func (r *tenantRepository) BuscarDadosFiscais(ctx context.Context, tenantID uuid
 	err := db.QueryRow(ctx, query, tenantID).Scan(
 		&d.CNPJ, &d.InscricaoEstadual, &d.RazaoSocial, &d.CRT,
 		&d.Logradouro, &d.NumeroEndereco, &d.Bairro, &d.CodigoMunicipio, &d.Municipio, &d.UF, &d.CEP,
+		&d.QRCodeURLConsulta, &d.QRCodeCSCID, &d.QRCodeCSC,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrTenantNaoEncontrado

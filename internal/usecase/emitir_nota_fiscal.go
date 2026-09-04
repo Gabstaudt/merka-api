@@ -45,6 +45,7 @@ type EmitirNotaFiscal struct {
 	tenantRepo    repository.TenantRepository
 	productRepo   repository.ProductRepository
 	orderItemRepo repository.OrderItemRepository
+	conexaoTenant repository.ConexaoTenantProvider
 }
 
 func NewEmitirNotaFiscal(
@@ -53,6 +54,7 @@ func NewEmitirNotaFiscal(
 	tenantRepo repository.TenantRepository,
 	productRepo repository.ProductRepository,
 	orderItemRepo repository.OrderItemRepository,
+	conexaoTenant repository.ConexaoTenantProvider,
 ) *EmitirNotaFiscal {
 	return &EmitirNotaFiscal{
 		provider:      provider,
@@ -60,7 +62,35 @@ func NewEmitirNotaFiscal(
 		tenantRepo:    tenantRepo,
 		productRepo:   productRepo,
 		orderItemRepo: orderItemRepo,
+		conexaoTenant: conexaoTenant,
 	}
+}
+
+// ExecutarEmBackground dispara a emissão fiscal numa goroutine própria,
+// SEM travar quem chamou — Passo 6 ETAPA B: o caixa não pode ficar
+// esperando a resposta da SEFAZ (que pode demorar até
+// FISCAL_SEFAZ_TIMEOUT_SEGUNDOS antes de cair pra contingência) pra
+// terminar de fechar um pagamento e liberar o cupom pra impressão.
+//
+// Usa uma conexão Postgres PRÓPRIA (via conexaoTenant), nunca o ctx da
+// requisição HTTP: a conexão da requisição é liberada de volta ao pool
+// assim que o handler retorna (ver internal/middleware/tenant.go), e
+// como esta goroutine sobrevive à resposta HTTP, reusar esse ctx usaria
+// uma conexão já liberada — silenciosamente devolvida a outra requisição
+// concorrente, ou já fechada. RLS (isolamento multi-tenant) depende de
+// app.tenant_id estar setado na conexão realmente usada; por isso a
+// conexão nova, não o pool "puro".
+func (uc *EmitirNotaFiscal) ExecutarEmBackground(tenantID, paymentID uuid.UUID, metodo string, valor float64, documento string, comandaIDs []uuid.UUID) {
+	go func() {
+		ctx, liberar, err := uc.conexaoTenant.Contexto(context.Background(), tenantID)
+		if err != nil {
+			log.Printf("fiscal: falha ao adquirir conexão pra emissão em background do payment %s: %v", paymentID, err)
+			return
+		}
+		defer liberar()
+
+		uc.Executar(ctx, tenantID, paymentID, metodo, valor, documento, comandaIDs)
+	}()
 }
 
 func (uc *EmitirNotaFiscal) Executar(ctx context.Context, tenantID, paymentID uuid.UUID, metodo string, valor float64, documento string, comandaIDs []uuid.UUID) {
@@ -78,6 +108,20 @@ func (uc *EmitirNotaFiscal) Executar(ctx context.Context, tenantID, paymentID uu
 		log.Printf("fiscal: falha ao emitir NFC-e do payment %s: %v", paymentID, err)
 		if regErr := uc.receiptRepo.RegistrarFalha(ctx, tenantID, paymentID, err.Error()); regErr != nil {
 			log.Printf("fiscal: falha ao gravar fiscal_receipt de falha do payment %s: %v", paymentID, regErr)
+		}
+		return
+	}
+
+	if resultado.Contingencia {
+		// Passo 6 ETAPA B: SEFAZ indisponível — a NFC-e foi gerada e
+		// assinada (tpEmis=9), mas ainda não autorizada. Grava como
+		// emitida (é um documento fiscal válido, o cupom sai pro cliente
+		// normalmente) em modo_emissao='contingencia_pendente' — o worker
+		// de retransmissão (ETAPA C) tenta enviar de novo em background.
+		if regErr := uc.receiptRepo.RegistrarContingencia(ctx, tenantID, paymentID, resultado.ChaveAcesso, resultado.NumeroNota, resultado.XMLAssinado); regErr != nil {
+			log.Printf("fiscal: falha ao gravar fiscal_receipt de contingência do payment %s: %v", paymentID, regErr)
+		} else {
+			log.Printf("fiscal: NFC-e do payment %s emitida em CONTINGÊNCIA (SEFAZ indisponível) — chave %s", paymentID, resultado.ChaveAcesso)
 		}
 		return
 	}
@@ -176,17 +220,20 @@ func (uc *EmitirNotaFiscal) resolverPaymentInfo(ctx context.Context, tenantID, p
 // substitui um campo faltante por um placeholder.
 func montarEmitente(d *domain.DadosFiscaisTenant) (fiscal.EmitenteInfo, error) {
 	campos := map[string]*string{
-		"CNPJ":                d.CNPJ,
-		"inscrição estadual":  d.InscricaoEstadual,
-		"razão social":        d.RazaoSocial,
-		"CRT":                 d.CRT,
-		"logradouro":          d.Logradouro,
-		"número":              d.NumeroEndereco,
-		"bairro":              d.Bairro,
-		"código do município": d.CodigoMunicipio,
-		"município":           d.Municipio,
-		"UF":                  d.UF,
-		"CEP":                 d.CEP,
+		"CNPJ":                       d.CNPJ,
+		"inscrição estadual":         d.InscricaoEstadual,
+		"razão social":               d.RazaoSocial,
+		"CRT":                        d.CRT,
+		"logradouro":                 d.Logradouro,
+		"número":                     d.NumeroEndereco,
+		"bairro":                     d.Bairro,
+		"código do município":        d.CodigoMunicipio,
+		"município":                  d.Municipio,
+		"UF":                         d.UF,
+		"CEP":                        d.CEP,
+		"URL de consulta do QR-Code": d.QRCodeURLConsulta,
+		"id do CSC (QR-Code)":        d.QRCodeCSCID,
+		"CSC (QR-Code)":              d.QRCodeCSC,
 	}
 	for nome, valor := range campos {
 		if valor == nil || *valor == "" {
@@ -206,5 +253,9 @@ func montarEmitente(d *domain.DadosFiscaisTenant) (fiscal.EmitenteInfo, error) {
 		Municipio:       *d.Municipio,
 		UF:              *d.UF,
 		CEP:             *d.CEP,
+
+		QRCodeURLConsulta: *d.QRCodeURLConsulta,
+		QRCodeCSCID:       *d.QRCodeCSCID,
+		QRCodeCSC:         *d.QRCodeCSC,
 	}, nil
 }

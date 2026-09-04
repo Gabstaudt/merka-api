@@ -36,12 +36,21 @@ type PaymentInfo struct {
 	Serie    int
 }
 
-// NFCeResult é o retorno de uma emissão bem-sucedida.
+// NFCeResult é o retorno de uma emissão — bem-sucedida (autorizada online)
+// ou gerada em contingência (Passo 6 ETAPA B, NT 2026.002 tpEmis=9).
 type NFCeResult struct {
 	ChaveAcesso          string // chave de acesso de 44 dígitos da NFC-e
 	NumeroNota           string
 	LinkDANFE            string // link do documento auxiliar (recibo do cliente)
-	ProtocoloAutorizacao string // nProt devolvido pela SEFAZ — exigido pra cancelar a nota depois (US-22)
+	ProtocoloAutorizacao string // nProt devolvido pela SEFAZ — vazio se Contingencia=true (ainda não autorizada)
+
+	// Contingencia=true quando a SEFAZ estava indisponível (ErrSefazIndisponivel)
+	// no momento da emissão: a NFC-e foi gerada e assinada com tpEmis=9,
+	// mas NÃO foi enviada — XMLAssinado guarda o XML exato pra
+	// retransmissão posterior (worker de contingência, ETAPA C). Sempre
+	// vazio quando Contingencia=false.
+	Contingencia bool
+	XMLAssinado  string
 }
 
 // CancelamentoInfo é o que Provider.Cancelar precisa pra montar/enviar o

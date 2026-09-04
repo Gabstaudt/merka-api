@@ -157,6 +157,9 @@ func (f *fakeFiscalReceiptRepoComReceipt) RegistrarEmitida(context.Context, uuid
 func (f *fakeFiscalReceiptRepoComReceipt) RegistrarFalha(context.Context, uuid.UUID, uuid.UUID, string) error {
 	return nil
 }
+func (f *fakeFiscalReceiptRepoComReceipt) RegistrarContingencia(context.Context, uuid.UUID, uuid.UUID, string, string, string) error {
+	return nil
+}
 func (f *fakeFiscalReceiptRepoComReceipt) Listar(context.Context, uuid.UUID, repository.FiscalReceiptFiltro) ([]domain.FiscalReceipt, int, error) {
 	return nil, 0, nil
 }

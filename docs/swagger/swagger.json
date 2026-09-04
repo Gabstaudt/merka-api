@@ -569,6 +569,59 @@
             }
         },
         "/comandas/{id}/itens": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lista todos os order_items da comanda, todo status (inclusive removido/estornado, por transparência) — usado pelo Garçom pra mostrar o lançamento completo e o total parcial. Sem checagem de permissão granular: qualquer perfil autenticado pode consultar.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Listar itens lançados numa comanda (US-11/US-12)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -795,6 +848,52 @@
                     },
                     "409": {
                         "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mesas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lista todas as mesas do tenant, com a comanda em_uso associada quando houver — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Listar mesas do salão (US-16)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler.mesaResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2646,6 +2745,23 @@
             "type": "object",
             "properties": {
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.mesaResponse": {
+            "type": "object",
+            "properties": {
+                "codigo_fisico": {
+                    "type": "string"
+                },
+                "comanda_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "identificador": {
                     "type": "string"
                 }
             }

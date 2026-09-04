@@ -16,22 +16,24 @@ import (
 )
 
 type ComandaHandler struct {
-	consultarComanda *usecase.ConsultarComanda
-	abrirComanda     *usecase.AbrirComanda
-	registrarPeso    *usecase.RegistrarPeso
-	lancarItem       *usecase.LancarItem
-	liberarComanda   *usecase.LiberarComanda
-	cancelarComanda  *usecase.CancelarComanda
-	transferirMesa   *usecase.TransferirMesa
-	aplicarDesconto  *usecase.AplicarDesconto
-	auditWriter      *audit.Writer
-	hub              *ws.Hub
-	permRepo         repository.PermissionRepository
-	rateLimitEscrita fiber.Handler
+	consultarComanda   *usecase.ConsultarComanda
+	listarItensComanda *usecase.ListarItensComanda
+	abrirComanda       *usecase.AbrirComanda
+	registrarPeso      *usecase.RegistrarPeso
+	lancarItem         *usecase.LancarItem
+	liberarComanda     *usecase.LiberarComanda
+	cancelarComanda    *usecase.CancelarComanda
+	transferirMesa     *usecase.TransferirMesa
+	aplicarDesconto    *usecase.AplicarDesconto
+	auditWriter        *audit.Writer
+	hub                *ws.Hub
+	permRepo           repository.PermissionRepository
+	rateLimitEscrita   fiber.Handler
 }
 
 func NewComandaHandler(
 	consultarComanda *usecase.ConsultarComanda,
+	listarItensComanda *usecase.ListarItensComanda,
 	abrirComanda *usecase.AbrirComanda,
 	registrarPeso *usecase.RegistrarPeso,
 	lancarItem *usecase.LancarItem,
@@ -45,18 +47,19 @@ func NewComandaHandler(
 	rateLimitEscrita fiber.Handler,
 ) *ComandaHandler {
 	return &ComandaHandler{
-		consultarComanda: consultarComanda,
-		abrirComanda:     abrirComanda,
-		registrarPeso:    registrarPeso,
-		lancarItem:       lancarItem,
-		liberarComanda:   liberarComanda,
-		cancelarComanda:  cancelarComanda,
-		transferirMesa:   transferirMesa,
-		aplicarDesconto:  aplicarDesconto,
-		auditWriter:      auditWriter,
-		hub:              hub,
-		permRepo:         permRepo,
-		rateLimitEscrita: rateLimitEscrita,
+		consultarComanda:   consultarComanda,
+		listarItensComanda: listarItensComanda,
+		abrirComanda:       abrirComanda,
+		registrarPeso:      registrarPeso,
+		lancarItem:         lancarItem,
+		liberarComanda:     liberarComanda,
+		cancelarComanda:    cancelarComanda,
+		transferirMesa:     transferirMesa,
+		aplicarDesconto:    aplicarDesconto,
+		auditWriter:        auditWriter,
+		hub:                hub,
+		permRepo:           permRepo,
+		rateLimitEscrita:   rateLimitEscrita,
 	}
 }
 
@@ -69,6 +72,7 @@ func NewComandaHandler(
 // comentário em usecase/transferir_mesa.go.
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 	router.Get("/comandas/:codigo", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.ConsultarPorCodigo)
+	router.Get("/comandas/:id/itens", h.ListarItens)
 	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
 	router.Post("/comandas/:codigo/liberar", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Liberar)
 	router.Post("/comandas/:id/pesos", middleware.RequerPermissao(h.permRepo, domain.PermissaoRegistrarPeso), h.RegistrarPeso)
@@ -107,6 +111,40 @@ func (h *ComandaHandler) ConsultarPorCodigo(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(comanda)
+}
+
+// ListarItens godoc
+// @Summary      Listar itens lançados numa comanda (US-11/US-12)
+// @Description  Lista todos os order_items da comanda, todo status (inclusive removido/estornado, por transparência) — usado pelo Garçom pra mostrar o lançamento completo e o total parcial. Sem checagem de permissão granular: qualquer perfil autenticado pode consultar.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id  path      string  true  "ID da comanda"
+// @Success      200  {array}   domain.OrderItem
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /comandas/{id}/itens [get]
+func (h *ComandaHandler) ListarItens(c *fiber.Ctx) error {
+	comandaID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de comanda inválido"})
+	}
+
+	tenantID, _, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	itens, err := h.listarItensComanda.Executar(c.UserContext(), tenantID, comandaID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+
+	if itens == nil {
+		itens = []domain.OrderItem{}
+	}
+
+	return c.JSON(itens)
 }
 
 // abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.

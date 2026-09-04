@@ -123,7 +123,11 @@ func main() {
 	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool), middleware.RateLimitGlobal(auditWriter))
 	rateLimitEscritaCritica := middleware.RateLimitEscritaCritica(auditWriter)
 
+	tableRepo := postgres.NewTableRepository(pool)
+
 	consultarComanda := usecase.NewConsultarComanda(comandaRepo)
+	listarItensComanda := usecase.NewListarItensComanda(orderItemRepo)
+	listarMesas := usecase.NewListarMesas(tableRepo)
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
@@ -150,10 +154,13 @@ func main() {
 	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
 
 	comandaHandler := handler.NewComandaHandler(
-		consultarComanda, abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
+		consultarComanda, listarItensComanda, abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
 		auditWriter, hub, permissionRepo, rateLimitEscritaCritica,
 	)
 	comandaHandler.RegistrarRotas(protegidas)
+
+	tableHandler := handler.NewTableHandler(listarMesas)
+	tableHandler.RegistrarRotas(protegidas)
 
 	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
 	orderItemHandler.RegistrarRotas(protegidas)

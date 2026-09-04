@@ -149,6 +149,42 @@ func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenan
 	return itens, nil
 }
 
+func (r *orderItemRepository) ListarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.OrderItem, error) {
+	const query = `
+		SELECT id, tenant_id, comanda_id, product_id, quantidade, peso_kg, valor, status,
+		       lancado_por, lancado_em, removido_por, removido_em, motivo_remocao
+		FROM order_items
+		WHERE tenant_id = $1 AND comanda_id = $2
+		ORDER BY lancado_em
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, tenantID, comandaID)
+	if err != nil {
+		return nil, fmt.Errorf("listar order items da comanda: %w", err)
+	}
+	defer rows.Close()
+
+	var itens []domain.OrderItem
+	for rows.Next() {
+		var item domain.OrderItem
+		if err := rows.Scan(
+			&item.ID, &item.TenantID, &item.ComandaID, &item.ProductID, &item.Quantidade, &item.PesoKg,
+			&item.Valor, &item.Status, &item.LancadoPor, &item.LancadoEm,
+			&item.RemovidoPor, &item.RemovidoEm, &item.MotivoRemocao,
+		); err != nil {
+			return nil, fmt.Errorf("ler linha de order item: %w", err)
+		}
+		itens = append(itens, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar order items: %w", err)
+	}
+
+	return itens, nil
+}
+
 func (r *orderItemRepository) RemoverTodosAtivosDaComanda(ctx context.Context, comandaID, removidoPor uuid.UUID, motivo string) error {
 	const query = `
 		UPDATE order_items

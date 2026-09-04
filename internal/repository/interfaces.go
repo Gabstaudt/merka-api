@@ -54,6 +54,16 @@ type ComandaRepository interface {
 	AtualizarMesa(ctx context.Context, comandaID, tableID uuid.UUID) error
 }
 
+// TableRepository define o contrato de persistência para mesas do salão
+// (US-16) — usado pela tela do Garçom para listar mesas ocupadas e
+// escolher a mesa de destino de uma transferência.
+type TableRepository interface {
+	// ListarComComandaAtiva lista todas as mesas do tenant, com a comanda
+	// em_uso associada quando houver (LEFT JOIN — mesa livre vem com
+	// ComandaID/CodigoFisico nil no retorno).
+	ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComanda, error)
+}
+
 // UserRepository define o contrato de persistência para usuários —
 // usado pelo usecase de autenticação (login) e pelos usecases de gestão
 // de usuários (US-01).
@@ -146,6 +156,12 @@ type OrderItemRepository interface {
 	// (ETAPA 4) pra montar o detalhamento item a item exigido pela NFC-e,
 	// já que SomarTotalAtivo só devolve o total agregado.
 	ListarAtivosPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) ([]domain.OrderItem, error)
+
+	// ListarPorComanda busca TODOS os order_items de uma comanda (todo
+	// status, não só ativo) — usado pela tela do Garçom (US-11/US-12) pra
+	// mostrar o lançamento inteiro, inclusive itens já removidos/estornados
+	// por transparência (o registro original nunca é apagado).
+	ListarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.OrderItem, error)
 }
 
 // TenantRepository define o contrato de persistência para os dados

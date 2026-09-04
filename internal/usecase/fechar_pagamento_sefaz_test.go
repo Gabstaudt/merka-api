@@ -266,6 +266,15 @@ func (f *fakeOrderItemRepo) ListarAtivosPorComandas(_ context.Context, _ uuid.UU
 	}
 	return resultado, nil
 }
+func (f *fakeOrderItemRepo) ListarPorComanda(_ context.Context, _ uuid.UUID, comandaID uuid.UUID) ([]domain.OrderItem, error) {
+	var resultado []domain.OrderItem
+	for _, item := range f.itens {
+		if item.ComandaID == comandaID {
+			resultado = append(resultado, item)
+		}
+	}
+	return resultado, nil
+}
 
 func contemID(ids []uuid.UUID, alvo uuid.UUID) bool {
 	for _, id := range ids {

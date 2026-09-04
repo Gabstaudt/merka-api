@@ -22,6 +22,13 @@ Teste rápido:
 curl http://localhost:8080/health
 ```
 
+## Deploy em produção
+
+`docker-compose.yml` é só para desenvolvimento local (Postgres com porta
+publicada, segredos com valor padrão). Produção usa
+`docker-compose.prod.yml` (Nginx + TLS via Let's Encrypt, sem porta de
+banco exposta) — passo a passo completo em [docs/deploy.md](docs/deploy.md).
+
 ## Rodando sem Docker (Go local)
 
 ```bash

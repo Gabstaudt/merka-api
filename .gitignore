@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # Certificado digital A1 (ICP-Brasil) usado pra assinar NFC-e — ver
 # CLAUDE.md e internal/fiscal/certificado.go. Nunca commitar a chave

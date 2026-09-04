@@ -140,6 +140,19 @@ func (uc *EmitirNotaFiscal) Executar(ctx context.Context, tenantID, paymentID uu
 // falha com um motivo claro em vez de mandar uma NFC-e com dado inventado
 // pra SEFAZ (implicação tributária real, ver CLAUDE.md).
 func (uc *EmitirNotaFiscal) resolverPaymentInfo(ctx context.Context, tenantID, paymentID uuid.UUID, metodo string, valor float64, documento string, comandaIDs []uuid.UUID) (fiscal.PaymentInfo, error) {
+	// CPF/CNPJ do cliente (opcional, US-14) — quando informado, precisa
+	// passar no dígito verificador antes de qualquer coisa. Nunca aceito
+	// "porque parece um número de documento": um CPF/CNPJ malformado ou
+	// com DV errado indo pro XML fiscal é implicação tributária real
+	// (Passo 7 ETAPA 4, ver CLAUDE.md).
+	if documento != "" {
+		documentoValidado, err := domain.ValidarCPFOuCNPJ(documento)
+		if err != nil {
+			return fiscal.PaymentInfo{}, fmt.Errorf("documento do cliente: %w", err)
+		}
+		documento = documentoValidado
+	}
+
 	dadosFiscais, err := uc.tenantRepo.BuscarDadosFiscais(ctx, tenantID)
 	if err != nil {
 		return fiscal.PaymentInfo{}, fmt.Errorf("buscar dados fiscais do tenant: %w", err)

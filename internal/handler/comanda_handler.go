@@ -16,16 +16,17 @@ import (
 )
 
 type ComandaHandler struct {
-	abrirComanda    *usecase.AbrirComanda
-	registrarPeso   *usecase.RegistrarPeso
-	lancarItem      *usecase.LancarItem
-	liberarComanda  *usecase.LiberarComanda
-	cancelarComanda *usecase.CancelarComanda
-	transferirMesa  *usecase.TransferirMesa
-	aplicarDesconto *usecase.AplicarDesconto
-	auditWriter     *audit.Writer
-	hub             *ws.Hub
-	permRepo        repository.PermissionRepository
+	abrirComanda     *usecase.AbrirComanda
+	registrarPeso    *usecase.RegistrarPeso
+	lancarItem       *usecase.LancarItem
+	liberarComanda   *usecase.LiberarComanda
+	cancelarComanda  *usecase.CancelarComanda
+	transferirMesa   *usecase.TransferirMesa
+	aplicarDesconto  *usecase.AplicarDesconto
+	auditWriter      *audit.Writer
+	hub              *ws.Hub
+	permRepo         repository.PermissionRepository
+	rateLimitEscrita fiber.Handler
 }
 
 func NewComandaHandler(
@@ -39,18 +40,20 @@ func NewComandaHandler(
 	auditWriter *audit.Writer,
 	hub *ws.Hub,
 	permRepo repository.PermissionRepository,
+	rateLimitEscrita fiber.Handler,
 ) *ComandaHandler {
 	return &ComandaHandler{
-		abrirComanda:    abrirComanda,
-		registrarPeso:   registrarPeso,
-		lancarItem:      lancarItem,
-		liberarComanda:  liberarComanda,
-		cancelarComanda: cancelarComanda,
-		transferirMesa:  transferirMesa,
-		aplicarDesconto: aplicarDesconto,
-		auditWriter:     auditWriter,
-		hub:             hub,
-		permRepo:        permRepo,
+		abrirComanda:     abrirComanda,
+		registrarPeso:    registrarPeso,
+		lancarItem:       lancarItem,
+		liberarComanda:   liberarComanda,
+		cancelarComanda:  cancelarComanda,
+		transferirMesa:   transferirMesa,
+		aplicarDesconto:  aplicarDesconto,
+		auditWriter:      auditWriter,
+		hub:              hub,
+		permRepo:         permRepo,
+		rateLimitEscrita: rateLimitEscrita,
 	}
 }
 
@@ -66,7 +69,7 @@ func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/comandas/:codigo/liberar", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Liberar)
 	router.Post("/comandas/:id/pesos", middleware.RequerPermissao(h.permRepo, domain.PermissaoRegistrarPeso), h.RegistrarPeso)
 	router.Post("/comandas/:id/itens", middleware.RequerPermissao(h.permRepo, domain.PermissaoLancarItem), h.LancarItem)
-	router.Post("/comandas/:id/cancelar", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarComanda), h.Cancelar)
+	router.Post("/comandas/:id/cancelar", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarComanda), h.Cancelar)
 	router.Patch("/comandas/:id/mesa", h.TransferirMesa)
 	router.Post("/comandas/:id/desconto", middleware.RequerPermissao(h.permRepo, domain.PermissaoAplicarDesconto), h.AplicarDesconto)
 }

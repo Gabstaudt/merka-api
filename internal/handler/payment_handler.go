@@ -22,23 +22,29 @@ type PaymentHandler struct {
 	auditWriter        *audit.Writer
 	hub                *ws.Hub
 	permRepo           repository.PermissionRepository
+	rateLimitEscrita   fiber.Handler
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, cancelarNotaFiscal *usecase.CancelarNotaFiscal, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository) *PaymentHandler {
+func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, cancelarNotaFiscal *usecase.CancelarNotaFiscal, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository, rateLimitEscrita fiber.Handler) *PaymentHandler {
 	return &PaymentHandler{
 		fecharPagamento:    fecharPagamento,
 		cancelarNotaFiscal: cancelarNotaFiscal,
 		auditWriter:        auditWriter,
 		hub:                hub,
 		permRepo:           permRepo,
+		rateLimitEscrita:   rateLimitEscrita,
 	}
 }
 
 // RegistrarRotas conecta as rotas de pagamento no router informado —
-// espera-se que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
+// espera-se que já passe pelos middlewares Auth + Tenant (ver
+// cmd/api/main.go). fechar pagamento e cancelar nota levam
+// RateLimitEscritaCritica além do RateLimitGlobal já aplicado no grupo
+// (Passo 7 ETAPA 2) — não fazem sentido em alta frequência por um único
+// usuário.
 func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
-	router.Post("/pagamentos", middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
-	router.Post("/pagamentos/:id/cancelar-nota", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.CancelarNota)
+	router.Post("/pagamentos", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
+	router.Post("/pagamentos/:id/cancelar-nota", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.CancelarNota)
 }
 
 type pagamentoParcialRequest struct {

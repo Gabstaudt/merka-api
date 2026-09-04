@@ -117,7 +117,11 @@ func main() {
 	// Rotas autenticadas: Auth valida o JWT e injeta user_id/tenant_id/role_id
 	// no contexto; Tenant, na sequência, ativa o Row Level Security do
 	// Postgres para o tenant_id resolvido (ver internal/middleware/tenant.go).
-	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool))
+	// RateLimitGlobal roda por último no grupo — precisa de user_id (Auth)
+	// e da conexão da requisição já fixada (Tenant) pra poder registrar em
+	// audit_log quando aciona (Passo 7 ETAPA 2).
+	protegidas := app.Group("/", middleware.Auth(cfg.JWTSecret), middleware.Tenant(pool), middleware.RateLimitGlobal(auditWriter))
+	rateLimitEscritaCritica := middleware.RateLimitEscritaCritica(auditWriter)
 
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
@@ -146,7 +150,7 @@ func main() {
 
 	comandaHandler := handler.NewComandaHandler(
 		abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
-		auditWriter, hub, permissionRepo,
+		auditWriter, hub, permissionRepo, rateLimitEscritaCritica,
 	)
 	comandaHandler.RegistrarRotas(protegidas)
 
@@ -162,7 +166,7 @@ func main() {
 	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)
 	roleHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, auditWriter, hub, permissionRepo)
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
 	paymentHandler.RegistrarRotas(protegidas)
 
 	auditLogHandler := handler.NewAuditLogHandler(consultarAuditoria, permissionRepo)

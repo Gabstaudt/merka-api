@@ -1,0 +1,99 @@
+# Compose de PRODUÇÃO — separado de docker-compose.yml (dev) de propósito
+# (Passo 7 ETAPA 3, ver CLAUDE.md e docs/deploy.md para o passo a passo
+# completo de deploy numa VPS).
+#
+# Diferenças estruturais em relação ao dev:
+#   - postgres NÃO publica porta pro host (sem "ports:") — só acessível
+#     dentro da rede Docker interna, pelo hostname de serviço `postgres`.
+#     Em dev a porta 5432 é publicada pra você conectar um client SQL
+#     local; em produção isso é superfície de ataque desnecessária.
+#   - nginx na frente da API: termina TLS (Let's Encrypt via certbot),
+#     redireciona todo HTTP pra HTTPS, e é o único serviço com porta
+#     publicada (80/443). A API não fica exposta direto (sem "ports:"
+#     também) — só alcançável via nginx, dentro da rede Docker.
+#   - certbot roda como serviço de renovação periódica (a cada 12h,
+#     certbot só renova de fato quando o certificado está a <30 dias do
+#     vencimento — chamadas fora dessa janela são no-op).
+#
+# Nenhum segredo tem valor default aqui — todos vêm de .env.prod (nunca
+# versionado, ver .env.prod.example) ou de variáveis já exportadas no
+# ambiente da VPS. Rodar sem um .env.prod preenchido falha ao subir (as
+# variáveis ficam vazias), o que é o comportamento certo: melhor não
+# subir do que subir com JWT_SECRET vazio ou reaproveitado do dev.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - merka_pgdata_prod:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Sem "ports:" — só acessível dentro da rede Docker (serviço `api` e,
+    # se precisar de acesso administrativo pontual, via
+    # `docker compose -f docker-compose.prod.yml exec postgres psql ...`).
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      FISCAL_CERT_PATH: ${FISCAL_CERT_PATH}
+      FISCAL_CERT_SENHA: ${FISCAL_CERT_SENHA}
+      FISCAL_PROVIDER: ${FISCAL_PROVIDER:-sefaz}
+      FISCAL_AMBIENTE: ${FISCAL_AMBIENTE:-producao}
+      FISCAL_SEFAZ_TIMEOUT_SEGUNDOS: ${FISCAL_SEFAZ_TIMEOUT_SEGUNDOS:-8}
+    volumes:
+      # Certificado A1 real montado read-only — nunca copiado pra dentro
+      # da imagem (a imagem é a mesma buildada em dev/CI, sem segredo
+      # nenhum embutido).
+      - ${FISCAL_CERT_HOST_PATH}:${FISCAL_CERT_PATH}:ro
+    # Sem "ports:" — só alcançável via nginx (proxy_pass pro hostname de
+    # serviço `api:8080`, dentro da rede Docker).
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/tls:/etc/nginx/tls:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    # Recarrega a config a cada 6h — cobre o caso de o certbot renovar o
+    # certificado no meio do caminho sem precisar reiniciar o container
+    # manualmente.
+    command: sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_conf:/etc/letsencrypt
+    # Tenta renovar a cada 12h — certbot renew só age de fato quando o
+    # certificado está a menos de 30 dias do vencimento, então isso é
+    # seguro rodar com essa frequência (no-op na grande maioria das vezes).
+    entrypoint: sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+
+volumes:
+  merka_pgdata_prod:
+  certbot_www:
+  certbot_conf:

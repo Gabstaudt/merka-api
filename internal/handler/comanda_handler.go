@@ -16,6 +16,7 @@ import (
 )
 
 type ComandaHandler struct {
+	consultarComanda *usecase.ConsultarComanda
 	abrirComanda     *usecase.AbrirComanda
 	registrarPeso    *usecase.RegistrarPeso
 	lancarItem       *usecase.LancarItem
@@ -30,6 +31,7 @@ type ComandaHandler struct {
 }
 
 func NewComandaHandler(
+	consultarComanda *usecase.ConsultarComanda,
 	abrirComanda *usecase.AbrirComanda,
 	registrarPeso *usecase.RegistrarPeso,
 	lancarItem *usecase.LancarItem,
@@ -43,6 +45,7 @@ func NewComandaHandler(
 	rateLimitEscrita fiber.Handler,
 ) *ComandaHandler {
 	return &ComandaHandler{
+		consultarComanda: consultarComanda,
 		abrirComanda:     abrirComanda,
 		registrarPeso:    registrarPeso,
 		lancarItem:       lancarItem,
@@ -65,6 +68,7 @@ func NewComandaHandler(
 // leva RequerPermissao — é permitida a qualquer perfil autenticado, ver
 // comentário em usecase/transferir_mesa.go.
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
+	router.Get("/comandas/:codigo", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.ConsultarPorCodigo)
 	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
 	router.Post("/comandas/:codigo/liberar", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Liberar)
 	router.Post("/comandas/:id/pesos", middleware.RequerPermissao(h.permRepo, domain.PermissaoRegistrarPeso), h.RegistrarPeso)
@@ -72,6 +76,37 @@ func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/comandas/:id/cancelar", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarComanda), h.Cancelar)
 	router.Patch("/comandas/:id/mesa", h.TransferirMesa)
 	router.Post("/comandas/:id/desconto", middleware.RequerPermissao(h.permRepo, domain.PermissaoAplicarDesconto), h.AplicarDesconto)
+}
+
+// ConsultarPorCodigo godoc
+// @Summary      Consultar status de uma comanda pelo código físico
+// @Description  Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar. O porteiro só escaneia; quem escolhe a ação é o sistema.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Produce      json
+// @Param        codigo  path      string  true  "Código físico da comanda (código de barras/QR)"
+// @Success      200     {object}  domain.Comanda
+// @Failure      401     {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      404     {object}  map[string]string  "comanda não encontrada"
+// @Failure      500     {object}  map[string]string  "erro interno"
+// @Router       /comandas/{codigo} [get]
+func (h *ComandaHandler) ConsultarPorCodigo(c *fiber.Ctx) error {
+	codigo := c.Params("codigo")
+
+	tenantID, _, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	comanda, err := h.consultarComanda.Executar(c.UserContext(), tenantID, codigo)
+	if err != nil {
+		if errors.Is(err, postgres.ErrComandaNaoEncontrada) {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "comanda não encontrada"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+
+	return c.JSON(comanda)
 }
 
 // abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.

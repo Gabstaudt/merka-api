@@ -172,6 +172,67 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas/{codigo}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar. O porteiro só escaneia; quem escolhe a ação é o sistema.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Consultar status de uma comanda pelo código físico",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Código físico da comanda (código de barras/QR)",
+                        "name": "codigo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{codigo}/abrir": {
             "post": {
                 "security": [
@@ -2076,6 +2137,10 @@ const docTemplate = `{
                 "linkDanfe": {
                     "type": "string"
                 },
+                "modoEmissao": {
+                    "description": "Campos de contingência offline (Passo 6 ETAPA B/C, tpEmis=9) —\nModoEmissao é \"normal\" pra emissão online, ou um dos três estados de\ncontingência (ver migrations/0018_fiscal_receipts_contingencia.sql).\nXMLAssinado só é preenchido pra notas em contingência — é o XML\nexato retransmitido pelo worker (ContingenciaWorker), nunca\nremontado.",
+                    "type": "string"
+                },
                 "motivoCancelamento": {
                     "type": "string"
                 },
@@ -2112,6 +2177,9 @@ const docTemplate = `{
                 },
                 "whatsappEnviado": {
                     "type": "boolean"
+                },
+                "xmlassinado": {
+                    "type": "string"
                 }
             }
         },

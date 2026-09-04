@@ -23,19 +23,24 @@ func (h *TableHandler) RegistrarRotas(router fiber.Router) {
 	router.Get("/mesas", h.Listar)
 }
 
-// mesaResponse achata domain.TableComComanda pro formato que o front
-// consome — evita expor a estrutura aninhada Table/ComandaID/CodigoFisico
-// como três campos soltos sem contexto.
+// comandaResumoResponse é a projeção de domain.ComandaResumo pro JSON.
+type comandaResumoResponse struct {
+	ID           string `json:"id"`
+	CodigoFisico string `json:"codigo_fisico"`
+}
+
+// mesaResponse achata domain.TableComComandas pro formato que o front
+// consome. Comandas pode ter mais de um item: uma mesa pode ter mais de
+// uma comanda em_uso ao mesmo tempo (ex: dois grupos na mesma mesa).
 type mesaResponse struct {
-	ID            string  `json:"id"`
-	Identificador string  `json:"identificador"`
-	ComandaID     *string `json:"comanda_id"`
-	CodigoFisico  *string `json:"codigo_fisico"`
+	ID            string                  `json:"id"`
+	Identificador string                  `json:"identificador"`
+	Comandas      []comandaResumoResponse `json:"comandas"`
 }
 
 // Listar godoc
 // @Summary      Listar mesas do salão (US-16)
-// @Description  Lista todas as mesas do tenant, com a comanda em_uso associada quando houver — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.
+// @Description  Lista todas as mesas do tenant, com as comandas em_uso associadas quando houver (uma mesa pode ter mais de uma) — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.
 // @Tags         mesas
 // @Security     BearerAuth
 // @Produce      json
@@ -56,19 +61,14 @@ func (h *TableHandler) Listar(c *fiber.Ctx) error {
 
 	resposta := make([]mesaResponse, 0, len(mesas))
 	for _, m := range mesas {
-		var comandaID, codigoFisico *string
-		if m.ComandaID != nil {
-			id := m.ComandaID.String()
-			comandaID = &id
-		}
-		if m.CodigoFisico != nil {
-			codigoFisico = m.CodigoFisico
+		comandas := make([]comandaResumoResponse, 0, len(m.Comandas))
+		for _, cm := range m.Comandas {
+			comandas = append(comandas, comandaResumoResponse{ID: cm.ID.String(), CodigoFisico: cm.CodigoFisico})
 		}
 		resposta = append(resposta, mesaResponse{
 			ID:            m.Table.ID.String(),
 			Identificador: m.Table.Identificador,
-			ComandaID:     comandaID,
-			CodigoFisico:  codigoFisico,
+			Comandas:      comandas,
 		})
 	}
 

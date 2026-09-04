@@ -21,6 +21,6 @@ func NewListarMesas(tableRepo repository.TableRepository) *ListarMesas {
 	return &ListarMesas{tableRepo: tableRepo}
 }
 
-func (uc *ListarMesas) Executar(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComanda, error) {
+func (uc *ListarMesas) Executar(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComandas, error) {
 	return uc.tableRepo.ListarComComandaAtiva(ctx, tenantID)
 }

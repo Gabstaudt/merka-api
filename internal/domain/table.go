@@ -10,13 +10,20 @@ type Table struct {
 	Identificador string
 }
 
-// TableComComanda combina uma mesa com a comanda em uso associada a ela
-// (se houver) — usado pela tela do Garçom (US-16) tanto para listar mesas
-// já ocupadas quanto para escolher a mesa de destino de uma transferência.
-// ComandaID/CodigoFisico ficam nil quando a mesa não tem comanda em_uso no
-// momento.
-type TableComComanda struct {
-	Table        Table
-	ComandaID    *uuid.UUID
-	CodigoFisico *string
+// ComandaResumo é a projeção mínima de uma comanda usada dentro de
+// TableComComandas — só o suficiente pro Garçom identificar qual comanda
+// escolher numa mesa com mais de um grupo/cliente.
+type ComandaResumo struct {
+	ID           uuid.UUID
+	CodigoFisico string
+}
+
+// TableComComandas combina uma mesa com TODAS as comandas em_uso
+// associadas a ela — uma mesa pode ter mais de uma comanda em_uso ao
+// mesmo tempo (ex: dois grupos sentados na mesma mesa, cada um com sua
+// própria comanda). Comandas fica vazio quando a mesa não tem nenhuma
+// comanda em_uso no momento.
+type TableComComandas struct {
+	Table    Table
+	Comandas []ComandaResumo
 }

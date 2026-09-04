@@ -881,7 +881,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lista todas as mesas do tenant, com a comanda em_uso associada quando houver — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.",
+                "description": "Lista todas as mesas do tenant, com as comandas em_uso associadas quando houver (uma mesa pode ter mais de uma) — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.",
                 "produces": [
                     "application/json"
                 ],
@@ -2645,6 +2645,17 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.comandaResumoResponse": {
+            "type": "object",
+            "properties": {
+                "codigo_fisico": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.configurarPrecoPesoRequest": {
             "type": "object",
             "properties": {
@@ -2759,11 +2770,11 @@ const docTemplate = `{
         "internal_handler.mesaResponse": {
             "type": "object",
             "properties": {
-                "codigo_fisico": {
-                    "type": "string"
-                },
-                "comanda_id": {
-                    "type": "string"
+                "comandas": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_handler.comandaResumoResponse"
+                    }
                 },
                 "id": {
                     "type": "string"

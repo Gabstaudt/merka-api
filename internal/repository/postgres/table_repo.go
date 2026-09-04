@@ -20,13 +20,13 @@ func NewTableRepository(pool *pgxpool.Pool) repository.TableRepository {
 	return &tableRepository{pool: pool}
 }
 
-func (r *tableRepository) ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComanda, error) {
+func (r *tableRepository) ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComandas, error) {
 	const query = `
 		SELECT t.id, t.tenant_id, t.identificador, c.id, c.codigo_fisico
 		FROM tables t
 		LEFT JOIN comandas c ON c.table_id = t.id AND c.status = 'em_uso'
 		WHERE t.tenant_id = $1
-		ORDER BY t.identificador
+		ORDER BY t.identificador, c.codigo_fisico
 	`
 
 	db := connFromCtx(ctx, r.pool)
@@ -37,15 +37,36 @@ func (r *tableRepository) ListarComComandaAtiva(ctx context.Context, tenantID uu
 	}
 	defer rows.Close()
 
-	var mesas []domain.TableComComanda
+	// Uma mesa com N comandas em_uso vem em N linhas (LEFT JOIN) —
+	// agrupa por mesa preservando a ordem de t.identificador.
+	var mesas []domain.TableComComandas
+	indicePorMesa := map[uuid.UUID]int{}
+
 	for rows.Next() {
-		var m domain.TableComComanda
-		if err := rows.Scan(
-			&m.Table.ID, &m.Table.TenantID, &m.Table.Identificador, &m.ComandaID, &m.CodigoFisico,
-		); err != nil {
+		var tableID, tenantIDLinha uuid.UUID
+		var identificador string
+		var comandaID *uuid.UUID
+		var codigoFisico *string
+
+		if err := rows.Scan(&tableID, &tenantIDLinha, &identificador, &comandaID, &codigoFisico); err != nil {
 			return nil, fmt.Errorf("ler linha de mesa: %w", err)
 		}
-		mesas = append(mesas, m)
+
+		idx, existe := indicePorMesa[tableID]
+		if !existe {
+			mesas = append(mesas, domain.TableComComandas{
+				Table: domain.Table{ID: tableID, TenantID: tenantIDLinha, Identificador: identificador},
+			})
+			idx = len(mesas) - 1
+			indicePorMesa[tableID] = idx
+		}
+
+		if comandaID != nil {
+			mesas[idx].Comandas = append(mesas[idx].Comandas, domain.ComandaResumo{
+				ID:           *comandaID,
+				CodigoFisico: *codigoFisico,
+			})
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterar mesas: %w", err)

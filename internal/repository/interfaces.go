@@ -58,10 +58,10 @@ type ComandaRepository interface {
 // (US-16) — usado pela tela do Garçom para listar mesas ocupadas e
 // escolher a mesa de destino de uma transferência.
 type TableRepository interface {
-	// ListarComComandaAtiva lista todas as mesas do tenant, com a comanda
-	// em_uso associada quando houver (LEFT JOIN — mesa livre vem com
-	// ComandaID/CodigoFisico nil no retorno).
-	ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComanda, error)
+	// ListarComComandaAtiva lista todas as mesas do tenant, com TODAS as
+	// comandas em_uso associadas a cada uma (uma mesa pode ter mais de uma
+	// comanda em_uso ao mesmo tempo — mesa livre vem com Comandas vazio).
+	ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComandas, error)
 }
 
 // UserRepository define o contrato de persistência para usuários —

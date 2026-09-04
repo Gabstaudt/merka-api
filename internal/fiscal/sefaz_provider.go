@@ -224,3 +224,22 @@ func (p *FiscalProviderSefazDireto) Cancelar(ctx context.Context, info Cancelame
 
 	return CancelamentoResultado{ProtocoloCancelamento: resposta.ProtocoloCancelamento}, nil
 }
+
+// Retransmitir reenvia o XML de contingência exato (já assinado por
+// Emitir) — não reconstrói nada, só faz parse e envia. Devolve
+// ErrSefazIndisponivel (sem alterar nada, tenta de novo depois) ou
+// ErrRejeitadoPelaSefaz (o caller decide o que fazer — ver
+// ContingenciaWorker) sem modificação, direto de sefazClient.EnviarNFCe.
+func (p *FiscalProviderSefazDireto) Retransmitir(ctx context.Context, xmlAssinado string) (RetransmissaoResultado, error) {
+	doc := etree.NewDocument()
+	if err := doc.ReadFromString(xmlAssinado); err != nil {
+		return RetransmissaoResultado{}, fmt.Errorf("parsear XML de contingência: %w", err)
+	}
+
+	resposta, err := p.sefazClient.EnviarNFCe(ctx, doc)
+	if err != nil {
+		return RetransmissaoResultado{}, err
+	}
+
+	return RetransmissaoResultado{ProtocoloAutorizacao: resposta.NumeroProtocolo}, nil
+}

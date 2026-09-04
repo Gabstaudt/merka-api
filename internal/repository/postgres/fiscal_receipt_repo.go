@@ -117,6 +117,83 @@ func (r *fiscalReceiptRepository) RegistrarCancelamento(ctx context.Context, ten
 	return nil
 }
 
+// ListarPendentesDeContingencia busca fiscal_receipts em
+// 'contingencia_pendente' — usada pelo ContingenciaWorker (Passo 6 ETAPA
+// C), fora de uma requisição HTTP, então usa o pool diretamente (mesmo
+// padrão de ListarPendenciasNaoResolvidas em sync_alert_repo.go — o dono
+// das tabelas não é afetado por RLS).
+func (r *fiscalReceiptRepository) ListarPendentesDeContingencia(ctx context.Context) ([]domain.FiscalReceipt, error) {
+	const query = `
+		SELECT id, tenant_id, payment_id, chave_acesso, numero_nota, modo_emissao, xml_assinado
+		FROM fiscal_receipts
+		WHERE modo_emissao = 'contingencia_pendente'
+	`
+
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("listar fiscal_receipts pendentes de contingência: %w", err)
+	}
+	defer rows.Close()
+
+	var recibos []domain.FiscalReceipt
+	for rows.Next() {
+		var f domain.FiscalReceipt
+		if err := rows.Scan(&f.ID, &f.TenantID, &f.PaymentID, &f.ChaveAcesso, &f.NumeroNota, &f.ModoEmissao, &f.XMLAssinado); err != nil {
+			return nil, fmt.Errorf("ler linha de fiscal_receipt pendente: %w", err)
+		}
+		recibos = append(recibos, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar fiscal_receipts pendentes: %w", err)
+	}
+
+	return recibos, nil
+}
+
+// RegistrarContingenciaAutorizada grava que a retransmissão de uma NFC-e
+// em contingência foi autorizada — só aplica se ainda estiver
+// 'contingencia_pendente' (evita duplo processamento se dois ticks do
+// worker se sobrepuserem).
+func (r *fiscalReceiptRepository) RegistrarContingenciaAutorizada(ctx context.Context, tenantID, paymentID uuid.UUID, protocoloAutorizacao string) error {
+	const query = `
+		UPDATE fiscal_receipts
+		SET modo_emissao = 'contingencia_autorizada', protocolo_autorizacao = $1
+		WHERE tenant_id = $2 AND payment_id = $3 AND modo_emissao = 'contingencia_pendente'
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, protocoloAutorizacao, tenantID, paymentID)
+	if err != nil {
+		return fmt.Errorf("gravar contingência autorizada: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrFiscalReceiptNaoEncontrado
+	}
+
+	return nil
+}
+
+// RegistrarContingenciaRejeitada grava que a retransmissão foi rejeitada
+// — caso raro e grave (ver comentário no repository.FiscalReceiptRepository).
+func (r *fiscalReceiptRepository) RegistrarContingenciaRejeitada(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error {
+	const query = `
+		UPDATE fiscal_receipts
+		SET modo_emissao = 'contingencia_rejeitada', motivo_falha = $1
+		WHERE tenant_id = $2 AND payment_id = $3 AND modo_emissao = 'contingencia_pendente'
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, motivo, tenantID, paymentID)
+	if err != nil {
+		return fmt.Errorf("gravar contingência rejeitada: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrFiscalReceiptNaoEncontrado
+	}
+
+	return nil
+}
+
 func (r *fiscalReceiptRepository) RegistrarFalha(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error {
 	const query = `
 		INSERT INTO fiscal_receipts (tenant_id, payment_id, tipo_documento, emitida, motivo_falha)

@@ -177,6 +177,15 @@ func (f *fakeFiscalReceiptRepoComReceipt) BuscarPorPaymentID(_ context.Context, 
 		Cancelada:            f.cancelada,
 	}, nil
 }
+func (f *fakeFiscalReceiptRepoComReceipt) ListarPendentesDeContingencia(context.Context) ([]domain.FiscalReceipt, error) {
+	return nil, nil
+}
+func (f *fakeFiscalReceiptRepoComReceipt) RegistrarContingenciaAutorizada(context.Context, uuid.UUID, uuid.UUID, string) error {
+	return nil
+}
+func (f *fakeFiscalReceiptRepoComReceipt) RegistrarContingenciaRejeitada(context.Context, uuid.UUID, uuid.UUID, string) error {
+	return nil
+}
 func (f *fakeFiscalReceiptRepoComReceipt) RegistrarCancelamento(_ context.Context, _, _ uuid.UUID, protocolo, motivo string) error {
 	f.cancelamentoRegistrado = true
 	f.protocoloCancelamento = protocolo

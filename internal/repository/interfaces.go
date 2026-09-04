@@ -185,6 +185,14 @@ type SyncAlertRepository interface {
 	// contexto de uma requisição HTTP (sem tenant fixado via RLS), então
 	// varre todos os tenants de uma vez.
 	ListarPendenciasNaoResolvidas(ctx context.Context, criadoAntesDe time.Time) ([]domain.SyncAlert, error)
+
+	// RegistrarContingenciaRejeitada grava o alerta do tipo
+	// 'contingencia_rejeitada' (Passo 6 ETAPA C, migration 0020) — usado
+	// pelo ContingenciaWorker quando a SEFAZ rejeita, na retransmissão,
+	// uma NFC-e que já foi emitida em contingência (cupom já entregue).
+	// Sem comanda_id específica associada (o alerta é sobre o payment,
+	// não uma comanda) — detalhes carrega payment_id/chave/motivo.
+	RegistrarContingenciaRejeitada(ctx context.Context, tenantID uuid.UUID, detalhes map[string]any) error
 }
 
 // FiscalReceiptRepository define o contrato de persistência para os
@@ -227,6 +235,25 @@ type FiscalReceiptRepository interface {
 	// bem-sucedido (US-22) — cancelada=true, protocolo do evento e
 	// motivo (xJust) informado pelo usuário.
 	RegistrarCancelamento(ctx context.Context, tenantID, paymentID uuid.UUID, protocoloCancelamento, motivo string) error
+
+	// ListarPendentesDeContingencia busca fiscal_receipts com
+	// modo_emissao='contingencia_pendente' — usado pelo ContingenciaWorker
+	// (Passo 6 ETAPA C). Roda fora de uma requisição HTTP (sem tenant
+	// fixado via RLS), então varre todos os tenants de uma vez, igual
+	// ListarPendenciasNaoResolvidas.
+	ListarPendentesDeContingencia(ctx context.Context) ([]domain.FiscalReceipt, error)
+
+	// RegistrarContingenciaAutorizada grava que a retransmissão de uma
+	// NFC-e em contingência foi autorizada (cStat 100/120/150) —
+	// modo_emissao vira 'contingencia_autorizada', protocolo_autorizacao
+	// preenchido.
+	RegistrarContingenciaAutorizada(ctx context.Context, tenantID, paymentID uuid.UUID, protocoloAutorizacao string) error
+
+	// RegistrarContingenciaRejeitada grava que a retransmissão de uma
+	// NFC-e em contingência foi rejeitada — caso raro e grave (o cupom já
+	// foi entregue ao cliente), exige intervenção manual (ver
+	// SyncAlertRepository.RegistrarContingenciaRejeitada, disparado junto).
+	RegistrarContingenciaRejeitada(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error
 }
 
 // FiscalReceiptFiltro são os filtros aceitos por FiscalReceiptRepository.Listar

@@ -41,4 +41,20 @@ type FiscalReceipt struct {
 	CanceladaEm           *time.Time
 	MotivoCancelamento    *string
 	ProtocoloCancelamento *string
+
+	// Campos de contingência offline (Passo 6 ETAPA B/C, tpEmis=9) —
+	// ModoEmissao é "normal" pra emissão online, ou um dos três estados de
+	// contingência (ver migrations/0018_fiscal_receipts_contingencia.sql).
+	// XMLAssinado só é preenchido pra notas em contingência — é o XML
+	// exato retransmitido pelo worker (ContingenciaWorker), nunca
+	// remontado.
+	ModoEmissao string
+	XMLAssinado *string
 }
+
+const (
+	ModoEmissaoNormal                 = "normal"
+	ModoEmissaoContingenciaPendente   = "contingencia_pendente"
+	ModoEmissaoContingenciaAutorizada = "contingencia_autorizada"
+	ModoEmissaoContingenciaRejeitada  = "contingencia_rejeitada"
+)

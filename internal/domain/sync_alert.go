@@ -13,6 +13,12 @@ type TipoSyncAlert string
 const (
 	TipoAlertaPendencia30s        TipoSyncAlert = "pendencia_30s"
 	TipoAlertaComandaJaFinalizada TipoSyncAlert = "comanda_ja_finalizada"
+
+	// TipoAlertaContingenciaRejeitada (migration 0020, Passo 6 ETAPA C):
+	// uma NFC-e emitida em contingência offline (tpEmis=9, cupom já
+	// entregue ao cliente) foi rejeitada pela SEFAZ na retransmissão —
+	// caso raro e grave, exige intervenção manual do Gestor.
+	TipoAlertaContingenciaRejeitada TipoSyncAlert = "contingencia_rejeitada"
 )
 
 // SyncAlert é o registro de um alerta de sincronização: pendência de

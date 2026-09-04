@@ -104,3 +104,6 @@ func (f *fakeSyncAlertRepo) RegistrarConflitoComandaFinalizada(_ context.Context
 func (f *fakeSyncAlertRepo) ListarPendenciasNaoResolvidas(_ context.Context, _ time.Time) ([]domain.SyncAlert, error) {
 	return nil, nil
 }
+func (f *fakeSyncAlertRepo) RegistrarContingenciaRejeitada(_ context.Context, _ uuid.UUID, _ map[string]any) error {
+	return nil
+}

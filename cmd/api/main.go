@@ -179,6 +179,13 @@ func main() {
 	pendenciaWorker := ws.NewPendenciaWorker(hub, syncAlertRepo)
 	go pendenciaWorker.Run(workerCtx)
 
+	// Worker de retransmissão de contingência offline (Passo 6 ETAPA C,
+	// NT 2026.002 tpEmis=9) — varre fiscal_receipts a cada 90s atrás de
+	// NFC-e emitidas com a SEFAZ fora do ar e tenta reenviar; ver
+	// internal/ws/contingencia_worker.go.
+	contingenciaWorker := ws.NewContingenciaWorker(hub, fiscalReceiptRepo, syncAlertRepo, fiscalProvider)
+	go contingenciaWorker.Run(workerCtx)
+
 	log.Printf("Merka API rodando na porta %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {
 		log.Fatal(err)

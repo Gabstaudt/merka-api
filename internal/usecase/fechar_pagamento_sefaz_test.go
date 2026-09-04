@@ -380,6 +380,15 @@ func (f *fakeFiscalReceiptRepo) BuscarPorPaymentID(_ context.Context, _, payment
 	}
 	return nil, fmt.Errorf("fiscal_receipt não encontrado pro payment %s", paymentID)
 }
+func (f *fakeFiscalReceiptRepo) ListarPendentesDeContingencia(_ context.Context) ([]domain.FiscalReceipt, error) {
+	return nil, nil
+}
+func (f *fakeFiscalReceiptRepo) RegistrarContingenciaAutorizada(_ context.Context, _, _ uuid.UUID, _ string) error {
+	return nil
+}
+func (f *fakeFiscalReceiptRepo) RegistrarContingenciaRejeitada(_ context.Context, _, _ uuid.UUID, _ string) error {
+	return nil
+}
 func (f *fakeFiscalReceiptRepo) RegistrarCancelamento(_ context.Context, _, _ uuid.UUID, _, _ string) error {
 	return nil
 }

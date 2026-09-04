@@ -67,6 +67,12 @@ type CancelamentoResultado struct {
 	ProtocoloCancelamento string
 }
 
+// RetransmissaoResultado é o retorno de uma retransmissão de contingência
+// bem-sucedida (Passo 6 ETAPA C).
+type RetransmissaoResultado struct {
+	ProtocoloAutorizacao string
+}
+
 // Provider abstrai a integradora fiscal. O usecase de emissão
 // (emitir_nota_fiscal.go) depende só desta interface — trocar de
 // fornecedor no futuro é implementar um novo Provider, sem tocar na
@@ -78,4 +84,14 @@ type Provider interface {
 	// validou prazo/estado antes (ver usecase.CancelarNotaFiscal); o
 	// provider só monta/envia o evento e devolve o protocolo.
 	Cancelar(ctx context.Context, info CancelamentoInfo) (CancelamentoResultado, error)
+
+	// Retransmitir reenvia à SEFAZ uma NFC-e já gerada e assinada em
+	// contingência offline (Passo 6 ETAPA C) — xmlAssinado é o XML exato
+	// devolvido por Emitir (NFCeResult.XMLAssinado), nunca remontado (
+	// remontar geraria uma chave de acesso diferente da já impressa no
+	// cupom entregue ao cliente). Erro pode ser ErrSefazIndisponivel
+	// (ainda fora do ar — quem chama tenta de novo no próximo tick) ou
+	// ErrRejeitadoPelaSefaz (caso raro e grave — cupom já entregue, exige
+	// alerta pro Gestor, ver ContingenciaWorker).
+	Retransmitir(ctx context.Context, xmlAssinado string) (RetransmissaoResultado, error)
 }

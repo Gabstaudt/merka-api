@@ -28,3 +28,7 @@ func (m *MockProvider) Emitir(_ context.Context, payment PaymentInfo) (NFCeResul
 func (m *MockProvider) Cancelar(_ context.Context, _ CancelamentoInfo) (CancelamentoResultado, error) {
 	return CancelamentoResultado{ProtocoloCancelamento: fmt.Sprintf("MOCKCANC%d", time.Now().UnixNano())}, nil
 }
+
+func (m *MockProvider) Retransmitir(_ context.Context, _ string) (RetransmissaoResultado, error) {
+	return RetransmissaoResultado{ProtocoloAutorizacao: fmt.Sprintf("MOCKPROT%d", time.Now().UnixNano())}, nil
+}

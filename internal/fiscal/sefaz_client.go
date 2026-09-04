@@ -226,8 +226,24 @@ func (c *SefazClient) EnviarNFCe(ctx context.Context, nfeAssinada *etree.Documen
 // nenhuma NFCe) — útil pra testar conectividade/autenticação mTLS
 // isoladamente, sem gastar uma numeração de nota.
 func (c *SefazClient) ConsultarStatusServico(ctx context.Context, cUF string) (cStat, xMotivo string, err error) {
-	corpoConsulta := fmt.Sprintf(`<consStatServ xmlns="%s" versao="4.00"><tpAmb>%s</tpAmb><cUF>%s</cUF><xServ>STATUS</xServ></consStatServ>`,
-		nfeNamespace, statusAmbiente(c.urlAutorizacao), cUF)
+	// Montado via etree, não fmt.Sprintf com "%s" pro cUF — mesmo cUF
+	// vindo hoje só de codigoUF() (tabela fixa, nunca input de usuário),
+	// esta função é exportada e cUF é um parâmetro livre; concatenar
+	// string em XML é a categoria de bug que o Passo 7 ETAPA 4 pede pra
+	// eliminar em qualquer lugar que monte XML, não só nos caminhos com
+	// dado de usuário confirmado hoje.
+	consultaDoc := etree.NewDocument()
+	consStatServ := consultaDoc.CreateElement("consStatServ")
+	consStatServ.CreateAttr("xmlns", nfeNamespace)
+	consStatServ.CreateAttr("versao", "4.00")
+	consStatServ.CreateElement("tpAmb").SetText(statusAmbiente(c.urlAutorizacao))
+	consStatServ.CreateElement("cUF").SetText(cUF)
+	consStatServ.CreateElement("xServ").SetText("STATUS")
+
+	corpoConsulta, err := consultaDoc.WriteToString()
+	if err != nil {
+		return "", "", fmt.Errorf("serializar consStatServ: %w", err)
+	}
 
 	envelope := montarEnvelopeSOAPGenerico(corpoConsulta, "nfeDadosMsg", "NfeStatusServico4")
 

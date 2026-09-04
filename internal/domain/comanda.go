@@ -22,13 +22,13 @@ const (
 // (código de barras/QR) que acompanha o cliente do porteiro à mesa.
 // Esta struct não conhece banco de dados nem HTTP — regra de negócio pura.
 type Comanda struct {
-	ID            uuid.UUID
-	TenantID      uuid.UUID
-	CodigoFisico  string
-	Status        StatusComanda
-	TableID       *uuid.UUID
-	AbertaEm      *time.Time
-	FechadaEm     *time.Time
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	CodigoFisico string
+	Status       StatusComanda
+	TableID      *uuid.UUID
+	AbertaEm     *time.Time
+	FechadaEm    *time.Time
 }
 
 // PodeSerEntregue valida a regra de negócio da US-07:

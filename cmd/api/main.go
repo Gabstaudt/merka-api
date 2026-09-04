@@ -68,13 +68,40 @@ func main() {
 	paymentRepo := postgres.NewPaymentRepository(pool)
 	syncAlertRepo := postgres.NewSyncAlertRepository(pool)
 	fiscalReceiptRepo := postgres.NewFiscalReceiptRepository(pool)
+	permissionRepo := postgres.NewPermissionRepository(pool)
+	discountRepo := postgres.NewDiscountRepository(pool)
+	productPriceHistoryRepo := postgres.NewProductPriceHistoryRepository(pool)
+	roleRepo := postgres.NewRoleRepository(pool)
+	auditLogRepo := postgres.NewAuditLogRepository(pool)
+	relatorioRepo := postgres.NewRelatorioRepository(pool)
 	auditWriter := audit.NewWriter(pool)
 	hub := ws.NewHub()
 
-	// Provider mock: simula emissão de NFC-e com sucesso, sem depender de
-	// credenciais reais de integradora ainda (ver internal/fiscal/mock_provider.go
-	// para o exemplo comentado de como plugar a Focus NFe de verdade).
-	fiscalProvider := fiscal.NewMockProvider()
+	tenantRepo := postgres.NewTenantRepository(pool)
+	conexaoTenantProvider := postgres.NewConexaoTenantProvider(pool)
+
+	// FISCAL_PROVIDER=mock (padrão) simula emissão com sucesso, sem falar
+	// com a SEFAZ — bom pra dev local e pra voltar rápido em produção se a
+	// integração real travar. FISCAL_PROVIDER=sefaz usa a integração
+	// direta (ETAPA 4, ver CLAUDE.md); falha no boot se o certificado A1
+	// não carregar, em vez de subir e falhar toda emissão em silêncio.
+	var fiscalProvider fiscal.Provider
+	switch cfg.FiscalProvider {
+	case "sefaz":
+		ambiente := fiscal.AmbienteHomologacao
+		if cfg.FiscalAmbiente == "producao" {
+			ambiente = fiscal.AmbienteProducao
+		}
+		provider, err := fiscal.NovoFiscalProviderSefazDireto(cfg.FiscalCertPath, cfg.FiscalCertSenha, ambiente, cfg.FiscalSefazTimeout)
+		if err != nil {
+			log.Fatalf("FISCAL_PROVIDER=sefaz mas o provider não pôde ser inicializado: %v", err)
+		}
+		fiscalProvider = provider
+		log.Printf("fiscal: emitindo NFC-e via integração direta com a SEFAZ (ambiente=%s)", cfg.FiscalAmbiente)
+	default:
+		fiscalProvider = fiscal.NewMockProvider()
+		log.Printf("fiscal: emitindo NFC-e via MockProvider (defina FISCAL_PROVIDER=sefaz pra usar a integração real)")
+	}
 
 	// GET /ws precisa ser registrado ANTES do app.Group("/", ...) abaixo:
 	// um Group com prefixo "/" vira middleware casando com qualquer rota
@@ -95,14 +122,54 @@ func main() {
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
-	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo)
+	liberarComanda := usecase.NewLiberarComanda(comandaRepo)
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo)
+	transferirMesa := usecase.NewTransferirMesa(comandaRepo)
+	aplicarDesconto := usecase.NewAplicarDesconto(orderItemRepo, discountRepo)
+	estornarPeso := usecase.NewEstornarPeso(orderItemRepo)
+	removerItem := usecase.NewRemoverItem(orderItemRepo)
+	cadastrarProduto := usecase.NewCadastrarProduto(productRepo, productPriceHistoryRepo)
+	configurarPrecoPeso := usecase.NewConfigurarPrecoPeso(productRepo, productPriceHistoryRepo)
+	listarProdutos := usecase.NewListarProdutos(productRepo)
+	criarUsuario := usecase.NewCriarUsuario(userRepo, roleRepo)
+	desativarUsuario := usecase.NewDesativarUsuario(userRepo)
+	criarPerfil := usecase.NewCriarPerfil(roleRepo, permissionRepo)
+	editarPermissoesPerfil := usecase.NewEditarPermissoesPerfil(roleRepo, permissionRepo)
+	listarPerfis := usecase.NewListarPerfis(roleRepo)
+	listarPermissoes := usecase.NewListarPermissoes(permissionRepo)
+	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
+	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
+	consultarNotasFiscais := usecase.NewConsultarNotasFiscais(fiscalReceiptRepo)
+	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo, conexaoTenantProvider)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, emitirNotaFiscal)
+	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
 
-	comandaHandler := handler.NewComandaHandler(abrirComanda, registrarPeso, lancarItem, auditWriter, hub)
+	comandaHandler := handler.NewComandaHandler(
+		abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
+		auditWriter, hub, permissionRepo,
+	)
 	comandaHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, auditWriter, hub)
+	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
+	orderItemHandler.RegistrarRotas(protegidas)
+
+	productHandler := handler.NewProductHandler(cadastrarProduto, configurarPrecoPeso, listarProdutos, auditWriter, permissionRepo)
+	productHandler.RegistrarRotas(protegidas)
+
+	userHandler := handler.NewUserHandler(criarUsuario, desativarUsuario, auditWriter, permissionRepo)
+	userHandler.RegistrarRotas(protegidas)
+
+	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)
+	roleHandler.RegistrarRotas(protegidas)
+
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, auditWriter, hub, permissionRepo)
 	paymentHandler.RegistrarRotas(protegidas)
+
+	auditLogHandler := handler.NewAuditLogHandler(consultarAuditoria, permissionRepo)
+	auditLogHandler.RegistrarRotas(protegidas)
+
+	reportHandler := handler.NewReportHandler(gerarRelatorioVendas, consultarNotasFiscais, permissionRepo)
+	reportHandler.RegistrarRotas(protegidas)
 
 	// Worker de pendência de 30s (seção 15 do planejamento) — roda em
 	// background pela vida inteira do processo; ver TODO em
@@ -111,6 +178,13 @@ func main() {
 	defer pararWorker()
 	pendenciaWorker := ws.NewPendenciaWorker(hub, syncAlertRepo)
 	go pendenciaWorker.Run(workerCtx)
+
+	// Worker de retransmissão de contingência offline (Passo 6 ETAPA C,
+	// NT 2026.002 tpEmis=9) — varre fiscal_receipts a cada 90s atrás de
+	// NFC-e emitidas com a SEFAZ fora do ar e tenta reenviar; ver
+	// internal/ws/contingencia_worker.go.
+	contingenciaWorker := ws.NewContingenciaWorker(hub, fiscalReceiptRepo, syncAlertRepo, fiscalProvider)
+	go contingenciaWorker.Run(workerCtx)
 
 	log.Printf("Merka API rodando na porta %s", cfg.Port)
 	if err := app.Listen(":" + cfg.Port); err != nil {

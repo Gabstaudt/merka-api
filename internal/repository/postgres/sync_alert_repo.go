@@ -48,6 +48,32 @@ func (r *syncAlertRepository) RegistrarConflitoComandaFinalizada(ctx context.Con
 	return nil
 }
 
+// RegistrarContingenciaRejeitada grava o alerta do tipo
+// 'contingencia_rejeitada' (Passo 6 ETAPA C, migration 0020) — disparado
+// pelo ContingenciaWorker quando a SEFAZ rejeita, na retransmissão, uma
+// NFC-e que já foi emitida em contingência offline (cupom já entregue).
+// Sem comanda_id/origem_user_id (o alerta é sobre o payment, não uma ação
+// de um usuário específico) — tudo relevante vai em detalhes.
+func (r *syncAlertRepository) RegistrarContingenciaRejeitada(ctx context.Context, tenantID uuid.UUID, detalhes map[string]any) error {
+	const query = `
+		INSERT INTO sync_alerts (tenant_id, tipo, detalhes)
+		VALUES ($1, 'contingencia_rejeitada', $2::jsonb)
+	`
+
+	payload, err := json.Marshal(detalhes)
+	if err != nil {
+		return fmt.Errorf("serializar detalhes do alerta: %w", err)
+	}
+
+	// Roda no worker de background (fora de requisição HTTP) — pool
+	// direto, mesmo padrão de ListarPendenciasNaoResolvidas.
+	if _, err := r.pool.Exec(ctx, query, tenantID, string(payload)); err != nil {
+		return fmt.Errorf("gravar sync_alert de contingência rejeitada: %w", err)
+	}
+
+	return nil
+}
+
 // ListarPendenciasNaoResolvidas busca alertas 'pendencia_30s' ainda não
 // resolvidos e mais antigos que criadoAntesDe. Roda fora de uma
 // requisição HTTP (worker de background, ver internal/ws/pendencia_worker.go),

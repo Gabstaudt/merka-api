@@ -2,11 +2,28 @@ package handler
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 
 	"github.com/merka/api/internal/usecase"
 )
+
+// loginLimiter mitiga força bruta de senha em POST /auth/login: 5
+// tentativas por IP a cada minuto. Por IP (não por login) de propósito —
+// um IP tentando N logins diferentes é o mesmo ataque de força bruta que
+// um IP tentando N senhas pro mesmo login, e limitar só por login
+// permitiria enumerar senhas de vários usuários em paralelo. 5/min é
+// generoso o bastante pra um usuário real errar a senha algumas vezes,
+// mas caro o bastante pra inviabilizar força bruta.
+var loginLimiter = limiter.New(limiter.Config{
+	Max:        5,
+	Expiration: 1 * time.Minute,
+	LimitReached: func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"erro": "muitas tentativas de login — aguarde um minuto e tente novamente"})
+	},
+})
 
 type AuthHandler struct {
 	autenticar *usecase.Autenticar
@@ -18,7 +35,7 @@ func NewAuthHandler(autenticar *usecase.Autenticar) *AuthHandler {
 
 // RegistrarRotas conecta as rotas públicas de autenticação no app Fiber.
 func (h *AuthHandler) RegistrarRotas(router fiber.Router) {
-	router.Post("/auth/login", h.Login)
+	router.Post("/auth/login", loginLimiter, h.Login)
 }
 
 type loginRequest struct {

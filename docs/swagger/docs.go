@@ -15,6 +15,111 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auditoria": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_auditoria\"). Filtros opcionais via querystring: usuario_id, acao, comanda_id, data_inicio, data_fim (RFC3339 ou \"AAAA-MM-DD\"). Paginação simples via limit (padrão 50, máx 200) e offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auditoria"
+                ],
+                "summary": "Consultar log de auditoria (US-03)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filtrar por usuário",
+                        "name": "usuario_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filtrar por ação (ex: lancar_item, cancelar_comanda)",
+                        "name": "acao",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filtrar por comanda",
+                        "name": "comanda_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora inicial (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_inicio",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora final (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_fim",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Itens por página (padrão 50, máx 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Deslocamento da página (padrão 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.auditoriaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "parâmetro inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "description": "Valida login/senha e devolve um JWT contendo user_id, tenant_id e role_id, usado nas demais rotas via header Authorization: Bearer \u003ctoken\u003e.",
@@ -35,7 +140,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.loginRequest"
+                            "$ref": "#/definitions/internal_handler.loginRequest"
                         }
                     }
                 ],
@@ -43,7 +148,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handler.loginResponse"
+                            "$ref": "#/definitions/internal_handler.loginResponse"
                         }
                     },
                     "400": {
@@ -98,7 +203,7 @@ const docTemplate = `{
                         "name": "body",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/handler.abrirComandaRequest"
+                            "$ref": "#/definitions/internal_handler.abrirComandaRequest"
                         }
                     }
                 ],
@@ -106,7 +211,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/domain.Comanda"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
                         }
                     },
                     "401": {
@@ -129,6 +234,267 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda não está disponível (em uso, paga ou cancelada)",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{codigo}/liberar": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Porteiro escaneia a comanda na saída; se estiver paga (sem saldo devedor), o sistema libera de volta pro estoque (status volta a \"disponivel\"). Se ainda tiver saldo pendente, bloqueia com erro claro.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Receber comanda na saída e validar zeramento (US-08)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Código físico da comanda",
+                        "name": "codigo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda ainda não foi paga",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/cancelar": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Gestor/Admin Super (permissão \"cancelar_comanda\"). Zera todos os itens/pesos lançados (marcados como removidos, nunca apagados), marca a comanda como cancelada e a libera de volta pro estoque. Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Cancelar comanda totalmente (US-15)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo do cancelamento",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.cancelarComandaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda não está em uso",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/desconto": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Gestor, Admin Super ou Caixa (permissão \"aplicar_desconto\"). Tipo \"valor_fixo\" ou \"percentual\", sempre com motivo — bloqueia se o desconto resultar em total negativo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Aplicar desconto manual (US-17)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Tipo, valor e motivo do desconto",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.aplicarDescontoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Discount"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório ou tipo inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "desconto resultaria em valor negativo",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -180,7 +546,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.lancarItemRequest"
+                            "$ref": "#/definitions/internal_handler.lancarItemRequest"
                         }
                     }
                 ],
@@ -188,7 +554,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "401": {
@@ -211,6 +577,88 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{id}/mesa": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permitida a qualquer perfil autenticado (sem checagem de permissão granular, por decisão do planejamento) — mantém todos os itens/pesos já lançados intactos.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Transferir comanda entre mesas (US-16)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Nova mesa",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.transferirMesaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda ou mesa não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda não está em uso",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -262,7 +710,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.registrarPesoRequest"
+                            "$ref": "#/definitions/internal_handler.registrarPesoRequest"
                         }
                     }
                 ],
@@ -270,7 +718,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.OrderItem"
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
                         }
                     },
                     "401": {
@@ -293,6 +741,299 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda já finalizada — lançamento rejeitado, alerta gravado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/notas-fiscais": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_relatorios\"). Filtros opcionais: data_inicio, data_fim (referem-se a payments.processado_em) e emitida (true/false). Paginação simples via limit/offset.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relatorios"
+                ],
+                "summary": "Listar notas/cupons fiscais (US-05)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Data/hora inicial (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_inicio",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data/hora final (RFC3339 ou AAAA-MM-DD)",
+                        "name": "data_fim",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filtrar por status de emissão",
+                        "name": "emitida",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Itens por página (padrão 50, máx 200)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Deslocamento da página (padrão 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.notasFiscaisResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "parâmetro inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/order-items/{id}/estornar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Operador de Balança remove um lançamento de peso já feito (ex: cliente foi e voltou pra repetir). O registro original é preservado — muda só o status pra \"estornado\". Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "order-items"
+                ],
+                "summary": "Estornar registro de peso (US-10)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do order_item",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo do estorno",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.motivoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "item não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "item já foi removido ou estornado anteriormente",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/order-items/{id}/remover": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Garçom remove um item unitário lançado por engano ou a pedido do cliente. O registro original é preservado — muda só o status pra \"removido\". Exige motivo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "order-items"
+                ],
+                "summary": "Remover item lançado da comanda (US-12)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do order_item",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Motivo da remoção",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.motivoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.OrderItem"
+                        }
+                    },
+                    "400": {
+                        "description": "motivo obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "item não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "item já foi removido ou estornado anteriormente",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -337,7 +1078,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handler.fecharPagamentoRequest"
+                            "$ref": "#/definitions/internal_handler.fecharPagamentoRequest"
                         }
                     }
                 ],
@@ -345,7 +1086,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/handler.fecharPagamentoResponse"
+                            "$ref": "#/definitions/internal_handler.fecharPagamentoResponse"
                         }
                     },
                     "400": {
@@ -386,10 +1127,864 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/pagamentos/{id}/cancelar-nota": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancela a NFC-e vinculada ao pagamento informado, junto à SEFAZ (integração direta, ver CLAUDE.md). Só permitido dentro do prazo regulamentar a partir da emissão — passado esse prazo a SEFAZ rejeita o evento, sem reenvio automático. Restrito a Caixa/Gestor/Admin Super.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pagamentos"
+                ],
+                "summary": "Cancelar NFC-e já emitida, dentro do prazo (US-22)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "id do payment",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Justificativa do cancelamento (15-255 caracteres, exigido pela SEFAZ)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.cancelarNotaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "justificativa inválida, nota não emitida, já cancelada, ou prazo de cancelamento expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "nenhuma nota fiscal encontrada pra esse pagamento",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/perfis": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Admin Super e Gestor podem ver — ver comentário em RegistrarRotas sobre a permissão reaproveitada.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Listar perfis do tenant",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"criar_perfil\"). Recebe nome e uma lista de chaves de permissão já existentes no catálogo — cria o role e as linhas correspondentes em role_permissions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Criar perfil customizado (US-02)",
+                "parameters": [
+                    {
+                        "description": "Nome do perfil e chaves de permissão",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.criarPerfilRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
+                        }
+                    },
+                    "400": {
+                        "description": "nome obrigatório ou permissão inexistente no catálogo",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe um perfil com esse nome",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/perfis/{id}/permissoes": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"criar_perfil\"). Bloqueia perfis de sistema (ex: \"Admin Super\") — imutáveis, pra não travar o próprio acesso do sistema.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Substituir as permissões de um perfil (US-02)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do perfil",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo conjunto de permissões",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.editarPermissoesPerfilRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Role"
+                        }
+                    },
+                    "400": {
+                        "description": "permissão inexistente no catálogo",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "perfil não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "perfil de sistema é imutável",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/permissoes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Admin Super e Gestor podem ver — mesma permissão reaproveitada de ListarPerfis.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Listar catálogo fixo de permissões",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.PermissionCatalogo"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/produtos": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Qualquer perfil autenticado — usado por garçom/balança pra escolher o que lançar (US-09/US-11).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Listar catálogo de produtos ativos",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super, Gestor ou Caixa (permissão \"cadastrar_produto\"). tipo_cobranca \"unitario\" exige preco_unitario \u003e 0; tipo_cobranca \"peso\" exige preco_por_kg \u003e 0 (tara_kg opcional, default 0). Grava a primeira linha em product_price_history para produtos do tipo peso.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Cadastrar novo produto no catálogo (US-21)",
+                "parameters": [
+                    {
+                        "description": "Dados do produto",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.cadastrarProdutoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "campo obrigatório ausente ou tipo_cobranca inválido",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/produtos/{id}/preco-peso": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super, Gestor, Caixa ou Balança (permissão \"configurar_preco_peso\") — ajuste operacional do dia a dia, diferente das demais configurações estruturais. Só se aplica a produtos do tipo peso. Grava o histórico da alteração em product_price_history.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "produtos"
+                ],
+                "summary": "Configurar preço/kg e tara de um produto (US-20)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do produto",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo preço/kg e/ou tara (ao menos um)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.configurarPrecoPesoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Product"
+                        }
+                    },
+                    "400": {
+                        "description": "nada para atualizar",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "produto não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "produto não é do tipo peso",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/relatorios/vendas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"ver_relatorios\"). Total vendido segmentado por forma de pagamento (payments dentro do período) e por produto/categoria (order_items ativos dentro do período).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "relatorios"
+                ],
+                "summary": "Relatório de vendas por período (US-04)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "dia | semana | mes | ano",
+                        "name": "periodo",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Data de referência do período (AAAA-MM-DD ou RFC3339)",
+                        "name": "data_referencia",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.RelatorioVendas"
+                        }
+                    },
+                    "400": {
+                        "description": "periodo ou data_referencia inválidos",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/usuarios": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"criar_usuario\"). Valida que role_id pertence ao mesmo tenant. Senha é sempre gravada como hash bcrypt, nunca em texto puro.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "usuarios"
+                ],
+                "summary": "Criar usuário (US-01)",
+                "parameters": [
+                    {
+                        "description": "Dados do novo usuário",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.criarUsuarioRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.usuarioResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "campo obrigatório ausente ou senha curta",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "perfil (role) não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe um usuário com esse login",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/usuarios/{id}/desativar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super ou Gestor (permissão \"criar_usuario\"). Nunca deleta — o usuário perde acesso imediatamente (login passa a falhar), mas o histórico dele em audit_log permanece intacto.",
+                "tags": [
+                    "usuarios"
+                ],
+                "summary": "Desativar usuário (US-01)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do usuário",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "usuário não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
-        "domain.Comanda": {
+        "github_com_merka_api_internal_domain.AuditLogEntry": {
+            "type": "object",
+            "properties": {
+                "acao": {
+                    "type": "string"
+                },
+                "comandaID": {
+                    "type": "string"
+                },
+                "criadoEm": {
+                    "type": "string"
+                },
+                "dados": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                },
+                "sucesso": {
+                    "type": "boolean"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "usuarioID": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.Comanda": {
             "type": "object",
             "properties": {
                 "abertaEm": {
@@ -405,7 +2000,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "$ref": "#/definitions/domain.StatusComanda"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.StatusComanda"
                 },
                 "tableID": {
                     "type": "string"
@@ -415,7 +2010,112 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.OrderItem": {
+        "github_com_merka_api_internal_domain.Discount": {
+            "type": "object",
+            "properties": {
+                "aplicadoEm": {
+                    "type": "string"
+                },
+                "aplicadoPor": {
+                    "type": "string"
+                },
+                "comandaID": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "motivo": {
+                    "type": "string"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipo": {
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.TipoDesconto"
+                },
+                "valor": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.FiscalReceipt": {
+            "type": "object",
+            "properties": {
+                "cancelada": {
+                    "type": "boolean"
+                },
+                "canceladaEm": {
+                    "type": "string"
+                },
+                "chaveAcesso": {
+                    "type": "string"
+                },
+                "documento": {
+                    "type": "string"
+                },
+                "emailDestino": {
+                    "type": "string"
+                },
+                "emailEnviado": {
+                    "type": "boolean"
+                },
+                "emitida": {
+                    "type": "boolean"
+                },
+                "emitidaEm": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "impressa": {
+                    "type": "boolean"
+                },
+                "linkDanfe": {
+                    "type": "string"
+                },
+                "motivoCancelamento": {
+                    "type": "string"
+                },
+                "motivoFalha": {
+                    "type": "string"
+                },
+                "numeroNota": {
+                    "type": "string"
+                },
+                "paymentID": {
+                    "type": "string"
+                },
+                "pdfgerado": {
+                    "type": "boolean"
+                },
+                "processadoEm": {
+                    "type": "string"
+                },
+                "protocoloAutorizacao": {
+                    "description": "Campos de cancelamento (US-22) — ProtocoloAutorizacao é o nProt da\nemissão original, exigido pelo evento de cancelamento\n(detEvento/nProt); sem ele não é possível montar um cancelamento\nválido pra essa nota.",
+                    "type": "string"
+                },
+                "protocoloCancelamento": {
+                    "type": "string"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipoDocumento": {
+                    "type": "string"
+                },
+                "whatsappDestino": {
+                    "type": "string"
+                },
+                "whatsappEnviado": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.OrderItem": {
             "type": "object",
             "properties": {
                 "comandaID": {
@@ -428,6 +2128,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "lancadoPor": {
+                    "type": "string"
+                },
+                "motivoRemocao": {
                     "type": "string"
                 },
                 "pesoKg": {
@@ -443,8 +2146,15 @@ const docTemplate = `{
                     "type": "number",
                     "format": "float64"
                 },
+                "removidoEm": {
+                    "type": "string"
+                },
+                "removidoPor": {
+                    "description": "Preenchidos só quando Status != ativo (US-10/US-12) — o lançamento\noriginal nunca é apagado, só marcado.",
+                    "type": "string"
+                },
                 "status": {
-                    "$ref": "#/definitions/domain.StatusOrderItem"
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.StatusOrderItem"
                 },
                 "tenantID": {
                     "type": "string"
@@ -455,7 +2165,156 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.StatusComanda": {
+        "github_com_merka_api_internal_domain.Permissao": {
+            "type": "string",
+            "enum": [
+                "criar_usuario",
+                "criar_perfil",
+                "configurar_sistema",
+                "ver_auditoria",
+                "ver_relatorios",
+                "lancar_item",
+                "remover_item",
+                "registrar_peso",
+                "estornar_peso",
+                "transferir_mesa",
+                "aplicar_desconto",
+                "cancelar_comanda",
+                "processar_pagamento",
+                "entregar_comanda",
+                "cadastrar_produto",
+                "configurar_preco_peso",
+                "cancelar_nota_fiscal"
+            ],
+            "x-enum-varnames": [
+                "PermissaoCriarUsuario",
+                "PermissaoCriarPerfil",
+                "PermissaoConfigurarSistema",
+                "PermissaoVerAuditoria",
+                "PermissaoVerRelatorios",
+                "PermissaoLancarItem",
+                "PermissaoRemoverItem",
+                "PermissaoRegistrarPeso",
+                "PermissaoEstornarPeso",
+                "PermissaoTransferirMesa",
+                "PermissaoAplicarDesconto",
+                "PermissaoCancelarComanda",
+                "PermissaoProcessarPagamento",
+                "PermissaoEntregarComanda",
+                "PermissaoCadastrarProduto",
+                "PermissaoConfigurarPrecoPeso",
+                "PermissaoCancelarNotaFiscal"
+            ]
+        },
+        "github_com_merka_api_internal_domain.PermissionCatalogo": {
+            "type": "object",
+            "properties": {
+                "chave": {
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.Permissao"
+                },
+                "descricao": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.Product": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "categoryID": {
+                    "type": "string"
+                },
+                "cfop": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "ncm": {
+                    "description": "NCM/CFOP: obrigatórios para emitir NFC-e via SEFAZ direta (ETAPA 4,\nver CLAUDE.md) — nil em produtos cadastrados antes da migration\n0014. internal/fiscal.FiscalProviderSefazDireto recusa emitir nota\ncom item sem esses dados em vez de estimar um valor.",
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "precoPorKg": {
+                    "description": "usado quando TipoCobranca == TipoCobrancaPeso",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "precoUnitario": {
+                    "description": "usado quando TipoCobranca == TipoCobrancaUnitario",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "taraKg": {
+                    "description": "peso do prato/recipiente, descontado do peso bruto lido na balança",
+                    "type": "number",
+                    "format": "float64"
+                },
+                "tenantID": {
+                    "type": "string"
+                },
+                "tipoCobranca": {
+                    "$ref": "#/definitions/github_com_merka_api_internal_domain.TipoCobranca"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.RelatorioVendas": {
+            "type": "object",
+            "properties": {
+                "fim": {
+                    "description": "RFC3339 — fim do período (exclusive)",
+                    "type": "string"
+                },
+                "inicio": {
+                    "description": "RFC3339 — início do período (inclusive)",
+                    "type": "string"
+                },
+                "periodo": {
+                    "type": "string"
+                },
+                "porFormaPagamento": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.VendaPorFormaPagamento"
+                    }
+                },
+                "porProduto": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.VendaPorProduto"
+                    }
+                },
+                "totalGeral": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.Role": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "sistema": {
+                    "type": "boolean"
+                },
+                "tenantID": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.StatusComanda": {
             "type": "string",
             "enum": [
                 "disponivel",
@@ -470,7 +2329,7 @@ const docTemplate = `{
                 "StatusCancelada"
             ]
         },
-        "domain.StatusOrderItem": {
+        "github_com_merka_api_internal_domain.StatusOrderItem": {
             "type": "string",
             "enum": [
                 "ativo",
@@ -483,7 +2342,62 @@ const docTemplate = `{
                 "StatusItemEstornado"
             ]
         },
-        "handler.abrirComandaRequest": {
+        "github_com_merka_api_internal_domain.TipoCobranca": {
+            "type": "string",
+            "enum": [
+                "unitario",
+                "peso"
+            ],
+            "x-enum-varnames": [
+                "TipoCobrancaUnitario",
+                "TipoCobrancaPeso"
+            ]
+        },
+        "github_com_merka_api_internal_domain.TipoDesconto": {
+            "type": "string",
+            "enum": [
+                "valor_fixo",
+                "percentual"
+            ],
+            "x-enum-varnames": [
+                "DescontoValorFixo",
+                "DescontoPercentual"
+            ]
+        },
+        "github_com_merka_api_internal_domain.VendaPorFormaPagamento": {
+            "type": "object",
+            "properties": {
+                "metodo": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "github_com_merka_api_internal_domain.VendaPorProduto": {
+            "type": "object",
+            "properties": {
+                "categoriaNome": {
+                    "type": "string"
+                },
+                "categoryID": {
+                    "type": "string"
+                },
+                "productID": {
+                    "type": "string"
+                },
+                "produtoNome": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "number",
+                    "format": "float64"
+                }
+            }
+        },
+        "internal_handler.abrirComandaRequest": {
             "type": "object",
             "properties": {
                 "table_id": {
@@ -491,7 +2405,133 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.fecharPagamentoRequest": {
+        "internal_handler.aplicarDescontoRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
+                    "type": "string"
+                },
+                "tipo": {
+                    "type": "string"
+                },
+                "valor": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler.auditoriaResponse": {
+            "type": "object",
+            "properties": {
+                "itens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.AuditLogEntry"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler.cadastrarProdutoRequest": {
+            "type": "object",
+            "properties": {
+                "category_id": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "preco_por_kg": {
+                    "type": "number"
+                },
+                "preco_unitario": {
+                    "type": "number"
+                },
+                "tara_kg": {
+                    "type": "number"
+                },
+                "tipo_cobranca": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.cancelarComandaRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.cancelarNotaRequest": {
+            "type": "object",
+            "properties": {
+                "justificativa": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.configurarPrecoPesoRequest": {
+            "type": "object",
+            "properties": {
+                "preco_por_kg": {
+                    "type": "number"
+                },
+                "tara_kg": {
+                    "type": "number"
+                }
+            }
+        },
+        "internal_handler.criarPerfilRequest": {
+            "type": "object",
+            "properties": {
+                "nome": {
+                    "type": "string"
+                },
+                "permissoes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_handler.criarUsuarioRequest": {
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "senha": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.editarPermissoesPerfilRequest": {
+            "type": "object",
+            "properties": {
+                "permissoes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_handler.fecharPagamentoRequest": {
             "type": "object",
             "properties": {
                 "comanda_ids": {
@@ -503,12 +2543,12 @@ const docTemplate = `{
                 "pagamentos": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/handler.pagamentoParcialRequest"
+                        "$ref": "#/definitions/internal_handler.pagamentoParcialRequest"
                     }
                 }
             }
         },
-        "handler.fecharPagamentoResponse": {
+        "internal_handler.fecharPagamentoResponse": {
             "type": "object",
             "properties": {
                 "payment_ids": {
@@ -519,7 +2559,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.lancarItemRequest": {
+        "internal_handler.lancarItemRequest": {
             "type": "object",
             "properties": {
                 "product_id": {
@@ -530,7 +2570,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.loginRequest": {
+        "internal_handler.loginRequest": {
             "type": "object",
             "properties": {
                 "login": {
@@ -541,7 +2581,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.loginResponse": {
+        "internal_handler.loginResponse": {
             "type": "object",
             "properties": {
                 "token": {
@@ -549,7 +2589,35 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.pagamentoParcialRequest": {
+        "internal_handler.motivoRequest": {
+            "type": "object",
+            "properties": {
+                "motivo": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.notasFiscaisResponse": {
+            "type": "object",
+            "properties": {
+                "itens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_merka_api_internal_domain.FiscalReceipt"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_handler.pagamentoParcialRequest": {
             "type": "object",
             "properties": {
                 "metodo": {
@@ -560,13 +2628,41 @@ const docTemplate = `{
                 }
             }
         },
-        "handler.registrarPesoRequest": {
+        "internal_handler.registrarPesoRequest": {
             "type": "object",
             "properties": {
                 "peso_bruto": {
                     "type": "number"
                 },
                 "product_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.transferirMesaRequest": {
+            "type": "object",
+            "properties": {
+                "table_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.usuarioResponse": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "login": {
+                    "type": "string"
+                },
+                "nome": {
+                    "type": "string"
+                },
+                "role_id": {
                     "type": "string"
                 }
             }

@@ -32,6 +32,12 @@ type OrderItem struct {
 	Status     StatusOrderItem
 	LancadoPor uuid.UUID
 	LancadoEm  time.Time
+
+	// Preenchidos só quando Status != ativo (US-10/US-12) — o lançamento
+	// original nunca é apagado, só marcado.
+	RemovidoPor   *uuid.UUID
+	RemovidoEm    *time.Time
+	MotivoRemocao *string
 }
 
 // NovoOrderItemPeso monta o lançamento de um item pesado na balança

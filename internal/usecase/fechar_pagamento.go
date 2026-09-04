@@ -114,13 +114,16 @@ func (uc *FecharPagamento) Executar(ctx context.Context, tenantID, processadoPor
 		// US-14: cartão (credito/debito/voucher) emite NFC-e
 		// automaticamente; dinheiro/ticket_alimentacao não emitem
 		// automaticamente (só se solicitado explicitamente — fora do
-		// escopo desta etapa). Executar() nunca devolve erro de propósito:
-		// uma falha na integradora fiscal não pode desfazer nem travar um
+		// escopo desta etapa). ExecutarEmBackground dispara numa goroutine
+		// própria (Passo 6 ETAPA B) — o caixa não fica esperando a SEFAZ
+		// responder (pode levar até FISCAL_SEFAZ_TIMEOUT_SEGUNDOS antes de
+		// cair pra contingência) pra liberar o cupom pro cliente; uma falha
+		// na emissão (ou queda da SEFAZ) nunca desfaz nem trava um
 		// pagamento já confirmado (ver doc do usecase para o racional
 		// completo). "documento" (CPF/CNPJ) ainda não é capturado no
 		// fechamento — fica vazio até a tela de caixa expor esse campo.
 		if DeveEmitirAutomaticamente(p.Metodo) {
-			uc.emitirNotaFiscal.Executar(ctx, tenantID, id, p.Metodo, p.Valor, "")
+			uc.emitirNotaFiscal.ExecutarEmBackground(tenantID, id, p.Metodo, p.Valor, "", comandaIDs)
 		}
 	}
 

@@ -47,8 +47,20 @@ desde o início.
 - **Balança (Toledo Prix 3, RS-232)**: recomendado usar Web Serial API
   direto no navegador (Chrome/Edge) para ler o peso, evitando agente local
   extra — mas isso ainda não foi implementado nem validado na prática
-- **Nota fiscal**: usar integradora via API (ex: Focus NFe, eNotas) para
-  emissão de NFC-e — não construir integração direta com SEFAZ
+- **Nota fiscal**: integração DIRETA com a SEFAZ (decisão revista em
+  2026-09-03 — a decisão anterior era usar integradora paga tipo Focus
+  NFe/eNotas; revertida após confirmação do usuário de que já possui
+  certificado digital A1 e considerando o custo de integradora pro volume
+  do negócio, 200-300 cupons/dia). Assinatura XML-DSig (RSA-SHA256) com o
+  certificado A1, layout NFC-e modelo 65 versão 4.0 já na versão
+  pós-Reforma Tributária 2026 (campos IBS/CBS/cClassTrib desde o início,
+  não como retrofit). Primeira instância: churrascaria no Pará, SEFAZ-PA.
+  Implementação faseada em internal/fiscal/ (certificado → assinatura →
+  XML builder → cliente SEFAZ homologação → integração no usecase →
+  cancelamento) — ver estado de cada etapa nesta seção conforme evolui.
+  IMPORTANTE: XML de nota fiscal incorreto tem implicação tributária/legal
+  real — validar com contador/consultor tributário antes de emissão em
+  produção, não confiar só em testes automatizados.
 
 ## Arquitetura em camadas (regra de dependência)
 
@@ -140,7 +152,7 @@ CREATE POLICY tenant_isolation ON nome_tabela
    `order_items`
 4. Uma mesa pode ter N comandas; Caixa soma todas via `payment_comandas`
 5. Caixa processa pagamento (pode ser misto entre métodos) → se algum
-   método for cartão, emite NFC-e via integradora; se só
+   método for cartão, emite NFC-e via integração direta com a SEFAZ; se só
    dinheiro/ticket, não emite automaticamente
 6. Comanda(s) marcada(s) `paga` → Porteiro na saída valida e libera
    (`paga → disponivel`)

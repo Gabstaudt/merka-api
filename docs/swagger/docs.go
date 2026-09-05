@@ -2516,6 +2516,9 @@ const docTemplate = `{
                     "description": "RFC3339 — início do período (inclusive)",
                     "type": "string"
                 },
+                "numeroComandas": {
+                    "type": "integer"
+                },
                 "periodo": {
                     "type": "string"
                 },

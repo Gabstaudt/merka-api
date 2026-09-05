@@ -364,4 +364,9 @@ type RelatorioRepository interface {
 	// removido/estornado, para order_items.lancado_em dentro de
 	// [inicio, fim).
 	SomarPorProduto(ctx context.Context, tenantID uuid.UUID, inicio, fim time.Time) ([]domain.VendaPorProduto, error)
+
+	// ContarComandasFechadas conta comandas distintas com pelo menos um
+	// payment dentro de [inicio, fim) — "fechadas" no sentido de
+	// US-13/US-14 (fechamento de caixa), não de "criadas" ou "abertas".
+	ContarComandasFechadas(ctx context.Context, tenantID uuid.UUID, inicio, fim time.Time) (int, error)
 }

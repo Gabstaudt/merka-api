@@ -43,6 +43,11 @@ func (uc *GerarRelatorioVendas) Executar(ctx context.Context, tenantID uuid.UUID
 		return nil, err
 	}
 
+	numeroComandas, err := uc.relatorioRepo.ContarComandasFechadas(ctx, tenantID, inicio, fim)
+	if err != nil {
+		return nil, err
+	}
+
 	var totalGeral float64
 	for _, v := range porFormaPagamento {
 		totalGeral = domain.ArredondarMoeda(totalGeral + v.Total)
@@ -53,6 +58,7 @@ func (uc *GerarRelatorioVendas) Executar(ctx context.Context, tenantID uuid.UUID
 		Inicio:            inicio.Format(time.RFC3339),
 		Fim:               fim.Format(time.RFC3339),
 		TotalGeral:        totalGeral,
+		NumeroComandas:    numeroComandas,
 		PorFormaPagamento: porFormaPagamento,
 		PorProduto:        porProduto,
 	}, nil

@@ -53,6 +53,28 @@ func (r *relatorioRepository) SomarPorFormaPagamento(ctx context.Context, tenant
 	return resultado, nil
 }
 
+// ContarComandasFechadas conta comandas DISTINTAS ligadas a pelo menos um
+// payment no período — uma comanda pode ter N payments (pagamento misto,
+// um por método), então COUNT(*) em payments superestimaria; por isso
+// conta comanda_id distinto via payment_comandas.
+func (r *relatorioRepository) ContarComandasFechadas(ctx context.Context, tenantID uuid.UUID, inicio, fim time.Time) (int, error) {
+	const query = `
+		SELECT COUNT(DISTINCT pc.comanda_id)
+		FROM payment_comandas pc
+		JOIN payments p ON p.id = pc.payment_id
+		WHERE p.tenant_id = $1 AND p.processado_em >= $2 AND p.processado_em < $3
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	var total int
+	if err := db.QueryRow(ctx, query, tenantID, inicio, fim).Scan(&total); err != nil {
+		return 0, fmt.Errorf("contar comandas fechadas: %w", err)
+	}
+
+	return total, nil
+}
+
 // SomarPorProduto agrupa por order_items.lancado_em (não por quando a
 // comanda foi paga) — é quando o item efetivamente entrou na comanda que
 // caracteriza a venda daquele produto no período.

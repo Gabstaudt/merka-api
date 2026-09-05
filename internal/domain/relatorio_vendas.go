@@ -28,6 +28,7 @@ type RelatorioVendas struct {
 	Inicio            string // RFC3339 — início do período (inclusive)
 	Fim               string // RFC3339 — fim do período (exclusive)
 	TotalGeral        float64
+	NumeroComandas    int
 	PorFormaPagamento []VendaPorFormaPagamento
 	PorProduto        []VendaPorProduto
 }

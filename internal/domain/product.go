@@ -25,6 +25,11 @@ type Product struct {
 	TaraKg        float64 // peso do prato/recipiente, descontado do peso bruto lido na balança
 	Ativo         bool
 
+	// CodigoCurto é opcional — um código curto (numérico ou não) pra
+	// lançamento rápido no Caixa/Garçom (digitar o código + Enter, sem
+	// precisar pesquisar por nome). nil em produtos sem código definido.
+	CodigoCurto *string
+
 	// NCM/CFOP: obrigatórios para emitir NFC-e via SEFAZ direta (ETAPA 4,
 	// ver CLAUDE.md) — nil em produtos cadastrados antes da migration
 	// 0014. internal/fiscal.FiscalProviderSefazDireto recusa emitir nota

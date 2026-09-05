@@ -17,22 +17,32 @@ import (
 )
 
 type PaymentHandler struct {
-	fecharPagamento    *usecase.FecharPagamento
-	cancelarNotaFiscal *usecase.CancelarNotaFiscal
-	auditWriter        *audit.Writer
-	hub                *ws.Hub
-	permRepo           repository.PermissionRepository
-	rateLimitEscrita   fiber.Handler
+	fecharPagamento          *usecase.FecharPagamento
+	cancelarNotaFiscal       *usecase.CancelarNotaFiscal
+	localizarNotasPorComanda *usecase.LocalizarNotasPorComanda
+	auditWriter              *audit.Writer
+	hub                      *ws.Hub
+	permRepo                 repository.PermissionRepository
+	rateLimitEscrita         fiber.Handler
 }
 
-func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, cancelarNotaFiscal *usecase.CancelarNotaFiscal, auditWriter *audit.Writer, hub *ws.Hub, permRepo repository.PermissionRepository, rateLimitEscrita fiber.Handler) *PaymentHandler {
+func NewPaymentHandler(
+	fecharPagamento *usecase.FecharPagamento,
+	cancelarNotaFiscal *usecase.CancelarNotaFiscal,
+	localizarNotasPorComanda *usecase.LocalizarNotasPorComanda,
+	auditWriter *audit.Writer,
+	hub *ws.Hub,
+	permRepo repository.PermissionRepository,
+	rateLimitEscrita fiber.Handler,
+) *PaymentHandler {
 	return &PaymentHandler{
-		fecharPagamento:    fecharPagamento,
-		cancelarNotaFiscal: cancelarNotaFiscal,
-		auditWriter:        auditWriter,
-		hub:                hub,
-		permRepo:           permRepo,
-		rateLimitEscrita:   rateLimitEscrita,
+		fecharPagamento:          fecharPagamento,
+		cancelarNotaFiscal:       cancelarNotaFiscal,
+		localizarNotasPorComanda: localizarNotasPorComanda,
+		auditWriter:              auditWriter,
+		hub:                      hub,
+		permRepo:                 permRepo,
+		rateLimitEscrita:         rateLimitEscrita,
 	}
 }
 
@@ -41,10 +51,13 @@ func NewPaymentHandler(fecharPagamento *usecase.FecharPagamento, cancelarNotaFis
 // cmd/api/main.go). fechar pagamento e cancelar nota levam
 // RateLimitEscritaCritica além do RateLimitGlobal já aplicado no grupo
 // (Passo 7 ETAPA 2) — não fazem sentido em alta frequência por um único
-// usuário.
+// usuário. GET /comandas/:id/notas-fiscais é só leitura, mesma permissão
+// de quem pode cancelar (US-22) — sem sentido deixar localizar a nota
+// mais aberto do que cancelar ela.
 func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/pagamentos", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
 	router.Post("/pagamentos/:id/cancelar-nota", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.CancelarNota)
+	router.Get("/comandas/:id/notas-fiscais", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.NotasFiscaisDaComanda)
 }
 
 type pagamentoParcialRequest struct {
@@ -194,4 +207,38 @@ func (h *PaymentHandler) CancelarNota(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// NotasFiscaisDaComanda godoc
+// @Summary      Localizar notas fiscais de uma comanda (US-22)
+// @Description  Lista os fiscal_receipts ligados à comanda (via payment_comandas), mais recente primeiro — usado pelo Caixa pra localizar a nota antes de decidir cancelar, sem saber o payment_id de cor.
+// @Tags         pagamentos
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id  path      string  true  "ID da comanda"
+// @Success      200  {array}   domain.FiscalReceipt
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403  {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /comandas/{id}/notas-fiscais [get]
+func (h *PaymentHandler) NotasFiscaisDaComanda(c *fiber.Ctx) error {
+	comandaID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de comanda inválido"})
+	}
+
+	tenantID, _, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	notas, err := h.localizarNotasPorComanda.Executar(c.UserContext(), tenantID, comandaID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+	if notas == nil {
+		notas = []domain.FiscalReceipt{}
+	}
+
+	return c.JSON(notas)
 }

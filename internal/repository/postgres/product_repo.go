@@ -29,7 +29,7 @@ func NewProductRepository(pool *pgxpool.Pool) repository.ProductRepository {
 func (r *productRepository) BuscarPorID(ctx context.Context, tenantID, productID uuid.UUID) (*domain.Product, error) {
 	const query = `
 		SELECT id, tenant_id, category_id, nome, tipo_cobranca,
-		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo, ncm, cfop
+		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo, ncm, cfop, codigo_curto
 		FROM products
 		WHERE tenant_id = $1 AND id = $2
 	`
@@ -39,7 +39,7 @@ func (r *productRepository) BuscarPorID(ctx context.Context, tenantID, productID
 	var p domain.Product
 	err := db.QueryRow(ctx, query, tenantID, productID).Scan(
 		&p.ID, &p.TenantID, &p.CategoryID, &p.Nome, &p.TipoCobranca,
-		&p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo, &p.NCM, &p.CFOP,
+		&p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo, &p.NCM, &p.CFOP, &p.CodigoCurto,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrProdutoNaoEncontrado
@@ -57,8 +57,8 @@ func (r *productRepository) BuscarPorID(ctx context.Context, tenantID, productID
 // espelhando o CHECK/comentário de migrations/0002_products.sql.
 func (r *productRepository) Criar(ctx context.Context, product *domain.Product) error {
 	const query = `
-		INSERT INTO products (tenant_id, category_id, nome, tipo_cobranca, preco_unitario, preco_por_kg, tara_kg)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO products (tenant_id, category_id, nome, tipo_cobranca, preco_unitario, preco_por_kg, tara_kg, codigo_curto)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, ativo
 	`
 
@@ -73,7 +73,7 @@ func (r *productRepository) Criar(ctx context.Context, product *domain.Product) 
 
 	err := db.QueryRow(ctx, query,
 		product.TenantID, product.CategoryID, product.Nome, product.TipoCobranca,
-		precoUnitario, precoPorKg, product.TaraKg,
+		precoUnitario, precoPorKg, product.TaraKg, product.CodigoCurto,
 	).Scan(&product.ID, &product.Ativo)
 	if err != nil {
 		return fmt.Errorf("gravar produto: %w", err)
@@ -100,7 +100,7 @@ func (r *productRepository) AtualizarPrecoPeso(ctx context.Context, productID uu
 func (r *productRepository) ListarAtivos(ctx context.Context, tenantID uuid.UUID) ([]domain.Product, error) {
 	const query = `
 		SELECT id, tenant_id, category_id, nome, tipo_cobranca,
-		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo
+		       COALESCE(preco_unitario, 0), COALESCE(preco_por_kg, 0), tara_kg, ativo, codigo_curto
 		FROM products
 		WHERE tenant_id = $1 AND ativo = true
 		ORDER BY nome
@@ -117,7 +117,7 @@ func (r *productRepository) ListarAtivos(ctx context.Context, tenantID uuid.UUID
 	var produtos []domain.Product
 	for rows.Next() {
 		var p domain.Product
-		if err := rows.Scan(&p.ID, &p.TenantID, &p.CategoryID, &p.Nome, &p.TipoCobranca, &p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo); err != nil {
+		if err := rows.Scan(&p.ID, &p.TenantID, &p.CategoryID, &p.Nome, &p.TipoCobranca, &p.PrecoUnitario, &p.PrecoPorKg, &p.TaraKg, &p.Ativo, &p.CodigoCurto); err != nil {
 			return nil, fmt.Errorf("ler linha de produto: %w", err)
 		}
 		produtos = append(produtos, p)

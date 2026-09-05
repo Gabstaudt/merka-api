@@ -191,3 +191,6 @@ func (f *fakeFiscalReceiptRepoComReceipt) RegistrarCancelamento(_ context.Contex
 	f.protocoloCancelamento = protocolo
 	return nil
 }
+func (f *fakeFiscalReceiptRepoComReceipt) BuscarPorComanda(context.Context, uuid.UUID, uuid.UUID) ([]domain.FiscalReceipt, error) {
+	return nil, nil
+}

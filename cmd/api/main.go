@@ -149,6 +149,7 @@ func main() {
 	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
 	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
 	consultarNotasFiscais := usecase.NewConsultarNotasFiscais(fiscalReceiptRepo)
+	localizarNotasPorComanda := usecase.NewLocalizarNotasPorComanda(fiscalReceiptRepo)
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo, conexaoTenantProvider)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, discountRepo, emitirNotaFiscal)
 	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
@@ -174,7 +175,7 @@ func main() {
 	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)
 	roleHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, localizarNotasPorComanda, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
 	paymentHandler.RegistrarRotas(protegidas)
 
 	auditLogHandler := handler.NewAuditLogHandler(consultarAuditoria, permissionRepo)

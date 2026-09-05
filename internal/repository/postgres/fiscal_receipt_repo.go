@@ -95,6 +95,56 @@ func (r *fiscalReceiptRepository) BuscarPorPaymentID(ctx context.Context, tenant
 	return &f, nil
 }
 
+// BuscarPorComanda localiza os fiscal_receipts ligados a uma comanda via
+// payment_comandas (uma comanda pode ter mais de um payment histórico —
+// ex: pagamento misto gera um payment por método, ver FecharPagamento) —
+// mais recente primeiro, pra US-22 (Caixa localizar a nota antes de
+// cancelar sem saber o payment_id de cor).
+func (r *fiscalReceiptRepository) BuscarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.FiscalReceipt, error) {
+	const query = `
+		SELECT fr.id, fr.tenant_id, fr.payment_id, fr.tipo_documento, fr.documento,
+		       fr.emitida, fr.emitida_em, fr.impressa, fr.pdf_gerado,
+		       fr.email_enviado, fr.email_destino, fr.whatsapp_enviado, fr.whatsapp_destino,
+		       fr.chave_acesso, fr.numero_nota, fr.link_danfe, fr.motivo_falha,
+		       fr.protocolo_autorizacao, fr.cancelada, fr.cancelada_em, fr.motivo_cancelamento, fr.protocolo_cancelamento,
+		       p.processado_em
+		FROM fiscal_receipts fr
+		JOIN payments p ON p.id = fr.payment_id
+		JOIN payment_comandas pc ON pc.payment_id = p.id
+		WHERE fr.tenant_id = $1 AND pc.comanda_id = $2
+		ORDER BY p.processado_em DESC
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, tenantID, comandaID)
+	if err != nil {
+		return nil, fmt.Errorf("buscar fiscal_receipts da comanda: %w", err)
+	}
+	defer rows.Close()
+
+	var recibos []domain.FiscalReceipt
+	for rows.Next() {
+		var f domain.FiscalReceipt
+		if err := rows.Scan(
+			&f.ID, &f.TenantID, &f.PaymentID, &f.TipoDocumento, &f.Documento,
+			&f.Emitida, &f.EmitidaEm, &f.Impressa, &f.PDFGerado,
+			&f.EmailEnviado, &f.EmailDestino, &f.WhatsappEnviado, &f.WhatsappDestino,
+			&f.ChaveAcesso, &f.NumeroNota, &f.LinkDanfe, &f.MotivoFalha,
+			&f.ProtocoloAutorizacao, &f.Cancelada, &f.CanceladaEm, &f.MotivoCancelamento, &f.ProtocoloCancelamento,
+			&f.ProcessadoEm,
+		); err != nil {
+			return nil, fmt.Errorf("ler linha de fiscal_receipt da comanda: %w", err)
+		}
+		recibos = append(recibos, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar fiscal_receipts da comanda: %w", err)
+	}
+
+	return recibos, nil
+}
+
 // RegistrarCancelamento grava o resultado de um cancelamento
 // bem-sucedido de NFC-e (US-22). Só aplica se a nota ainda estiver
 // emitida e não cancelada — evita cancelar duas vezes a mesma nota.
@@ -219,6 +269,7 @@ func (r *fiscalReceiptRepository) Listar(ctx context.Context, tenantID uuid.UUID
 		       fr.emitida, fr.emitida_em, fr.impressa, fr.pdf_gerado,
 		       fr.email_enviado, fr.email_destino, fr.whatsapp_enviado, fr.whatsapp_destino,
 		       fr.chave_acesso, fr.numero_nota, fr.link_danfe, fr.motivo_falha,
+		       fr.protocolo_autorizacao, fr.cancelada, fr.cancelada_em, fr.motivo_cancelamento, fr.protocolo_cancelamento,
 		       p.processado_em, count(*) OVER() AS total
 		FROM fiscal_receipts fr
 		JOIN payments p ON p.id = fr.payment_id
@@ -261,6 +312,7 @@ func (r *fiscalReceiptRepository) Listar(ctx context.Context, tenantID uuid.UUID
 			&f.Emitida, &f.EmitidaEm, &f.Impressa, &f.PDFGerado,
 			&f.EmailEnviado, &f.EmailDestino, &f.WhatsappEnviado, &f.WhatsappDestino,
 			&f.ChaveAcesso, &f.NumeroNota, &f.LinkDanfe, &f.MotivoFalha,
+			&f.ProtocoloAutorizacao, &f.Cancelada, &f.CanceladaEm, &f.MotivoCancelamento, &f.ProtocoloCancelamento,
 			&f.ProcessadoEm, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("ler linha de fiscal_receipt: %w", err)

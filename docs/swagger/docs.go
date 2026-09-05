@@ -792,6 +792,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas/{id}/notas-fiscais": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lista os fiscal_receipts ligados à comanda (via payment_comandas), mais recente primeiro — usado pelo Caixa pra localizar a nota antes de decidir cancelar, sem saber o payment_id de cor.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pagamentos"
+                ],
+                "summary": "Localizar notas fiscais de uma comanda (US-22)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_merka_api_internal_domain.FiscalReceipt"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{id}/pesos": {
             "post": {
                 "security": [
@@ -2402,6 +2466,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "cfop": {
+                    "type": "string"
+                },
+                "codigoCurto": {
+                    "description": "CodigoCurto é opcional — um código curto (numérico ou não) pra\nlançamento rápido no Caixa/Garçom (digitar o código + Enter, sem\nprecisar pesquisar por nome). nil em produtos sem código definido.",
                     "type": "string"
                 },
                 "id": {

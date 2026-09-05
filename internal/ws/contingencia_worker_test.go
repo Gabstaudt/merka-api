@@ -150,6 +150,9 @@ func (f *fakeReceiptRepo) RegistrarContingenciaRejeitada(_ context.Context, tena
 	f.rejeitadas = append(f.rejeitadas, contingenciaRejeitada{tenantID, paymentID, motivo})
 	return nil
 }
+func (f *fakeReceiptRepo) BuscarPorComanda(context.Context, uuid.UUID, uuid.UUID) ([]domain.FiscalReceipt, error) {
+	return nil, nil
+}
 
 type alertaRejeitado struct {
 	tenantID uuid.UUID

@@ -40,6 +40,14 @@ func NewReportHandler(
 func (h *ReportHandler) RegistrarRotas(router fiber.Router) {
 	router.Get("/relatorios/vendas", middleware.RequerPermissao(h.permRepo, domain.PermissaoVerRelatorios), h.RelatorioVendas)
 	router.Get("/notas-fiscais", middleware.RequerPermissao(h.permRepo, domain.PermissaoVerRelatorios), h.NotasFiscais)
+
+	// Alias do mesmo endpoint, sob a permissão "cancelar_nota_fiscal" (que
+	// o Caixa tem, diferente de "ver_relatorios" — restrita a Gestor/Admin
+	// Super) — o Caixa precisa poder ver as notas que ele mesmo emitiu
+	// pra localizar/cancelar, sem precisar de acesso a relatórios
+	// gerenciais completos. Mesmo handler, mesmo usecase, só a checagem
+	// de permissão muda.
+	router.Get("/caixa/notas-fiscais", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.NotasFiscais)
 }
 
 // RelatorioVendas godoc

@@ -270,6 +270,12 @@ type FiscalReceiptRepository interface {
 	// foi entregue ao cliente), exige intervenção manual (ver
 	// SyncAlertRepository.RegistrarContingenciaRejeitada, disparado junto).
 	RegistrarContingenciaRejeitada(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error
+
+	// BuscarPorComanda localiza os fiscal_receipts ligados a uma comanda
+	// (via payment_comandas), mais recente primeiro — usado pelo Caixa
+	// (US-22) pra localizar a nota de uma comanda específica antes de
+	// cancelar, sem precisar saber o payment_id de cor.
+	BuscarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.FiscalReceipt, error)
 }
 
 // FiscalReceiptFiltro são os filtros aceitos por FiscalReceiptRepository.Listar

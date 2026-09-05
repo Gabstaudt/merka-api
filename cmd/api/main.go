@@ -141,6 +141,7 @@ func main() {
 	configurarPrecoPeso := usecase.NewConfigurarPrecoPeso(productRepo, productPriceHistoryRepo)
 	listarProdutos := usecase.NewListarProdutos(productRepo)
 	criarUsuario := usecase.NewCriarUsuario(userRepo, roleRepo)
+	listarUsuarios := usecase.NewListarUsuarios(userRepo)
 	desativarUsuario := usecase.NewDesativarUsuario(userRepo)
 	criarPerfil := usecase.NewCriarPerfil(roleRepo, permissionRepo)
 	editarPermissoesPerfil := usecase.NewEditarPermissoesPerfil(roleRepo, permissionRepo)
@@ -169,7 +170,7 @@ func main() {
 	productHandler := handler.NewProductHandler(cadastrarProduto, configurarPrecoPeso, listarProdutos, auditWriter, permissionRepo)
 	productHandler.RegistrarRotas(protegidas)
 
-	userHandler := handler.NewUserHandler(criarUsuario, desativarUsuario, auditWriter, permissionRepo)
+	userHandler := handler.NewUserHandler(criarUsuario, desativarUsuario, listarUsuarios, auditWriter, permissionRepo)
 	userHandler.RegistrarRotas(protegidas)
 
 	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)

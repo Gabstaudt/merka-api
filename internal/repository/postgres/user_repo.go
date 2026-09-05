@@ -106,3 +106,37 @@ func (r *userRepository) Desativar(ctx context.Context, tenantID, userID uuid.UU
 
 	return nil
 }
+
+// Listar lista todos os usuários do tenant (ativos e inativos), sem o
+// hash de senha (SenhaHash fica vazio — só a query de login precisa
+// dele).
+func (r *userRepository) Listar(ctx context.Context, tenantID uuid.UUID) ([]domain.User, error) {
+	const query = `
+		SELECT id, tenant_id, role_id, nome, login, ativo
+		FROM users
+		WHERE tenant_id = $1
+		ORDER BY nome
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("listar usuarios: %w", err)
+	}
+	defer rows.Close()
+
+	var usuarios []domain.User
+	for rows.Next() {
+		var u domain.User
+		if err := rows.Scan(&u.ID, &u.TenantID, &u.RoleID, &u.Nome, &u.Login, &u.Ativo); err != nil {
+			return nil, fmt.Errorf("ler linha de usuario: %w", err)
+		}
+		usuarios = append(usuarios, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar usuarios: %w", err)
+	}
+
+	return usuarios, nil
+}

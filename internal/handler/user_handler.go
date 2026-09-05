@@ -18,6 +18,7 @@ import (
 type UserHandler struct {
 	criarUsuario     *usecase.CriarUsuario
 	desativarUsuario *usecase.DesativarUsuario
+	listarUsuarios   *usecase.ListarUsuarios
 	auditWriter      *audit.Writer
 	permRepo         repository.PermissionRepository
 }
@@ -25,12 +26,14 @@ type UserHandler struct {
 func NewUserHandler(
 	criarUsuario *usecase.CriarUsuario,
 	desativarUsuario *usecase.DesativarUsuario,
+	listarUsuarios *usecase.ListarUsuarios,
 	auditWriter *audit.Writer,
 	permRepo repository.PermissionRepository,
 ) *UserHandler {
 	return &UserHandler{
 		criarUsuario:     criarUsuario,
 		desativarUsuario: desativarUsuario,
+		listarUsuarios:   listarUsuarios,
 		auditWriter:      auditWriter,
 		permRepo:         permRepo,
 	}
@@ -39,8 +42,39 @@ func NewUserHandler(
 // RegistrarRotas conecta as rotas de usuário no router informado —
 // espera-se que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
 func (h *UserHandler) RegistrarRotas(router fiber.Router) {
+	router.Get("/usuarios", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarUsuario), h.Listar)
 	router.Post("/usuarios", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarUsuario), h.Criar)
 	router.Patch("/usuarios/:id/desativar", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarUsuario), h.Desativar)
+}
+
+// Listar godoc
+// @Summary      Listar usuários do tenant (US-01)
+// @Description  Restrito a Admin Super ou Gestor (permissão "criar_usuario"). Lista ativos e inativos, sem o hash de senha.
+// @Tags         usuarios
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {array}   usuarioResponse
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403  {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /usuarios [get]
+func (h *UserHandler) Listar(c *fiber.Ctx) error {
+	tenantID, _, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	usuarios, err := h.listarUsuarios.Executar(c.UserContext(), tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+
+	resposta := make([]usuarioResponse, 0, len(usuarios))
+	for _, u := range usuarios {
+		resposta = append(resposta, novaUsuarioResponse(&u))
+	}
+
+	return c.JSON(resposta)
 }
 
 // criarUsuarioRequest é o corpo de POST /usuarios.

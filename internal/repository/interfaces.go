@@ -77,6 +77,11 @@ type UserRepository interface {
 	// Desativar marca ativo=false — nunca DELETE, o histórico em
 	// audit_log permanece intacto (US-01).
 	Desativar(ctx context.Context, tenantID, userID uuid.UUID) error
+
+	// Listar lista todos os usuários do tenant (ativos e inativos — a
+	// tela de gestão precisa mostrar quem foi desativado, não só quem
+	// está ativo agora), ordenados por nome.
+	Listar(ctx context.Context, tenantID uuid.UUID) ([]domain.User, error)
 }
 
 // RoleRepository define o contrato de persistência para perfis (roles) —

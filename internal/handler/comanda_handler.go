@@ -25,6 +25,8 @@ type ComandaHandler struct {
 	cancelarComanda    *usecase.CancelarComanda
 	transferirMesa     *usecase.TransferirMesa
 	aplicarDesconto    *usecase.AplicarDesconto
+	listarTodas        *usecase.ListarTodasComandas
+	criarComanda       *usecase.CriarComanda
 	auditWriter        *audit.Writer
 	hub                *ws.Hub
 	permRepo           repository.PermissionRepository
@@ -41,6 +43,8 @@ func NewComandaHandler(
 	cancelarComanda *usecase.CancelarComanda,
 	transferirMesa *usecase.TransferirMesa,
 	aplicarDesconto *usecase.AplicarDesconto,
+	listarTodas *usecase.ListarTodasComandas,
+	criarComanda *usecase.CriarComanda,
 	auditWriter *audit.Writer,
 	hub *ws.Hub,
 	permRepo repository.PermissionRepository,
@@ -56,6 +60,8 @@ func NewComandaHandler(
 		cancelarComanda:    cancelarComanda,
 		transferirMesa:     transferirMesa,
 		aplicarDesconto:    aplicarDesconto,
+		listarTodas:        listarTodas,
+		criarComanda:       criarComanda,
 		auditWriter:        auditWriter,
 		hub:                hub,
 		permRepo:           permRepo,
@@ -71,6 +77,8 @@ func NewComandaHandler(
 // leva RequerPermissao — é permitida a qualquer perfil autenticado, ver
 // comentário em usecase/transferir_mesa.go.
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
+	router.Post("/comandas", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarComanda), h.Criar)
+	router.Get("/comandas/todas", middleware.RequerPermissao(h.permRepo, domain.PermissaoVerComandas), h.ListarTodas)
 	router.Get("/comandas/:codigo", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.ConsultarPorCodigo)
 	router.Get("/comandas/:id/itens", h.ListarItens)
 	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
@@ -145,6 +153,117 @@ func (h *ComandaHandler) ListarItens(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(itens)
+}
+
+// criarComandaRequest é o corpo de POST /comandas.
+type criarComandaRequest struct {
+	CodigoFisico string `json:"codigo_fisico"`
+}
+
+// Criar godoc
+// @Summary      Cadastrar comanda física nova (Admin Super/Gestor)
+// @Description  O código físico já existe no cartão/pulseira confeccionado — aqui só entra no banco, sempre "disponivel". Requer a permissão criar_comanda.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      criarComandaRequest  true  "Código físico da comanda nova"
+// @Success      201   {object}  domain.Comanda
+// @Failure      400   {object}  map[string]string  "código físico vazio"
+// @Failure      401   {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403   {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      409   {object}  map[string]string  "já existe uma comanda com esse código"
+// @Failure      500   {object}  map[string]string  "erro interno"
+// @Router       /comandas [post]
+func (h *ComandaHandler) Criar(c *fiber.Ctx) error {
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	var req criarComandaRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+	}
+
+	dadosAuditoria := map[string]any{"codigo_fisico": req.CodigoFisico}
+
+	comanda, err := audit.Executar(c.UserContext(), h.auditWriter, "criar_comanda", tenantID, userID, dadosAuditoria,
+		func() (*domain.Comanda, *uuid.UUID, error) {
+			comanda, err := h.criarComanda.Executar(c.UserContext(), tenantID, req.CodigoFisico)
+			var comandaID *uuid.UUID
+			if comanda != nil {
+				comandaID = &comanda.ID
+			}
+			return comanda, comandaID, err
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecase.ErrCodigoComandaObrigatorio):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
+		case errors.Is(err, postgres.ErrCodigoComandaJaExiste):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(comanda)
+}
+
+// comandaVisaoGeralResponse é a projeção de domain.ComandaVisaoGeral pro JSON.
+type comandaVisaoGeralResponse struct {
+	ID              string  `json:"id"`
+	CodigoFisico    string  `json:"codigo_fisico"`
+	Status          string  `json:"status"`
+	Mesa            *string `json:"mesa"`
+	AbertaEm        *string `json:"aberta_em"`
+	QuantidadeItens int     `json:"quantidade_itens"`
+	ValorTotal      float64 `json:"valor_total"`
+}
+
+// ListarTodas godoc
+// @Summary      Visão geral de todas as comandas (Admin Super/Gestor/Caixa)
+// @Description  Lista TODAS as comandas do tenant, qualquer status, com um resumo do que está lançado em cada uma — pra conferência rápida sem precisar buscar comanda por comanda pelo código. Requer a permissão ver_comandas.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {array}   comandaVisaoGeralResponse
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403  {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /comandas/todas [get]
+func (h *ComandaHandler) ListarTodas(c *fiber.Ctx) error {
+	tenantID, _, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	comandas, err := h.listarTodas.Executar(c.UserContext(), tenantID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+
+	resposta := make([]comandaVisaoGeralResponse, 0, len(comandas))
+	for _, cm := range comandas {
+		var abertaEm *string
+		if cm.AbertaEm != nil {
+			formatado := cm.AbertaEm.Format("2006-01-02T15:04:05Z07:00")
+			abertaEm = &formatado
+		}
+		resposta = append(resposta, comandaVisaoGeralResponse{
+			ID:              cm.ID.String(),
+			CodigoFisico:    cm.CodigoFisico,
+			Status:          string(cm.Status),
+			Mesa:            cm.MesaIdentificador,
+			AbertaEm:        abertaEm,
+			QuantidadeItens: cm.QuantidadeItens,
+			ValorTotal:      cm.ValorTotal,
+		})
+	}
+
+	return c.JSON(resposta)
 }
 
 // abrirComandaRequest é o corpo opcional aceito por POST /comandas/:codigo/abrir.

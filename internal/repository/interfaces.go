@@ -52,6 +52,20 @@ type ComandaRepository interface {
 	// mexer em nenhum outro campo — os itens/pesos já lançados continuam
 	// intactos, ligados à mesma comanda.
 	AtualizarMesa(ctx context.Context, comandaID, tableID uuid.UUID) error
+
+	// Criar cadastra uma comanda física nova (US-novo: Admin Super/Gestor
+	// podem cadastrar um código físico recém-confeccionado — ver
+	// PermissaoCriarComanda). Sempre nasce 'disponivel', sem mesa.
+	Criar(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error)
+
+	// ListarTodas retorna TODAS as comandas do tenant (qualquer status),
+	// com um resumo do que está dentro de cada uma — pra visão geral do
+	// Admin Super/Gestor/Caixa (permissão ver_comandas): quantas comandas
+	// existem, quais estão paradas com item lançado, etc. Não existe
+	// endpoint de "criar comanda": o código físico (codigo_fisico) é fixo
+	// desde a confecção do cartão/pulseira e só entra no banco por seed
+	// (ver merka-api/CLAUDE.md, seção "Comanda física").
+	ListarTodas(ctx context.Context, tenantID uuid.UUID) ([]domain.ComandaVisaoGeral, error)
 }
 
 // TableRepository define o contrato de persistência para mesas do salão

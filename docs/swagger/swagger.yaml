@@ -186,6 +186,8 @@ definitions:
     - cadastrar_produto
     - configurar_preco_peso
     - cancelar_nota_fiscal
+    - ver_comandas
+    - criar_comanda
     type: string
     x-enum-varnames:
     - PermissaoCriarUsuario
@@ -205,6 +207,8 @@ definitions:
     - PermissaoCadastrarProduto
     - PermissaoConfigurarPrecoPeso
     - PermissaoCancelarNotaFiscal
+    - PermissaoVerComandas
+    - PermissaoCriarComanda
   github_com_merka_api_internal_domain.PermissionCatalogo:
     properties:
       chave:
@@ -410,12 +414,34 @@ definitions:
       id:
         type: string
     type: object
+  internal_handler.comandaVisaoGeralResponse:
+    properties:
+      aberta_em:
+        type: string
+      codigo_fisico:
+        type: string
+      id:
+        type: string
+      mesa:
+        type: string
+      quantidade_itens:
+        type: integer
+      status:
+        type: string
+      valor_total:
+        type: number
+    type: object
   internal_handler.configurarPrecoPesoRequest:
     properties:
       preco_por_kg:
         type: number
       tara_kg:
         type: number
+    type: object
+  internal_handler.criarComandaRequest:
+    properties:
+      codigo_fisico:
+        type: string
     type: object
   internal_handler.criarPerfilRequest:
     properties:
@@ -709,6 +735,61 @@ paths:
       summary: Autenticar usuário
       tags:
       - auth
+  /comandas:
+    post:
+      consumes:
+      - application/json
+      description: O código físico já existe no cartão/pulseira confeccionado — aqui
+        só entra no banco, sempre "disponivel". Requer a permissão criar_comanda.
+      parameters:
+      - description: Código físico da comanda nova
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.criarComandaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
+        "400":
+          description: código físico vazio
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: já existe uma comanda com esse código
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cadastrar comanda física nova (Admin Super/Gestor)
+      tags:
+      - comandas
   /comandas/{codigo}:
     get:
       description: Só leitura, sem auditoria (não muda estado nenhum) — usado pelo
@@ -1225,6 +1306,43 @@ paths:
       security:
       - BearerAuth: []
       summary: Registrar peso de item na comanda (US-09)
+      tags:
+      - comandas
+  /comandas/todas:
+    get:
+      description: Lista TODAS as comandas do tenant, qualquer status, com um resumo
+        do que está lançado em cada uma — pra conferência rápida sem precisar buscar
+        comanda por comanda pelo código. Requer a permissão ver_comandas.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler.comandaVisaoGeralResponse'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Visão geral de todas as comandas (Admin Super/Gestor/Caixa)
       tags:
       - comandas
   /configuracoes:

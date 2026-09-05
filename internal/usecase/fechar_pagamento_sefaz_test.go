@@ -221,6 +221,12 @@ func (f *fakeComandaRepo) AbrirComanda(_ context.Context, _ uuid.UUID, _ *uuid.U
 }
 func (f *fakeComandaRepo) LiberarParaReuso(_ context.Context, _ uuid.UUID) error { return nil }
 func (f *fakeComandaRepo) AtualizarMesa(_ context.Context, _, _ uuid.UUID) error { return nil }
+func (f *fakeComandaRepo) ListarTodas(_ context.Context, _ uuid.UUID) ([]domain.ComandaVisaoGeral, error) {
+	return nil, nil
+}
+func (f *fakeComandaRepo) Criar(_ context.Context, _ uuid.UUID, _ string) (*domain.Comanda, error) {
+	return nil, nil
+}
 
 type fakeOrderItemRepo struct {
 	itens []domain.OrderItem

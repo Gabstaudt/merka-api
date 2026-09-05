@@ -172,6 +172,145 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "O código físico já existe no cartão/pulseira confeccionado — aqui só entra no banco, sempre \"disponivel\". Requer a permissão criar_comanda.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Cadastrar comanda física nova (Admin Super/Gestor)",
+                "parameters": [
+                    {
+                        "description": "Código físico da comanda nova",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.criarComandaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "400": {
+                        "description": "código físico vazio",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe uma comanda com esse código",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/todas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lista TODAS as comandas do tenant, qualquer status, com um resumo do que está lançado em cada uma — pra conferência rápida sem precisar buscar comanda por comanda pelo código. Requer a permissão ver_comandas.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Visão geral de todas as comandas (Admin Super/Gestor/Caixa)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler.comandaVisaoGeralResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{codigo}": {
             "get": {
                 "security": [
@@ -3174,7 +3313,9 @@ const docTemplate = `{
                 "entregar_comanda",
                 "cadastrar_produto",
                 "configurar_preco_peso",
-                "cancelar_nota_fiscal"
+                "cancelar_nota_fiscal",
+                "ver_comandas",
+                "criar_comanda"
             ],
             "x-enum-varnames": [
                 "PermissaoCriarUsuario",
@@ -3193,7 +3334,9 @@ const docTemplate = `{
                 "PermissaoEntregarComanda",
                 "PermissaoCadastrarProduto",
                 "PermissaoConfigurarPrecoPeso",
-                "PermissaoCancelarNotaFiscal"
+                "PermissaoCancelarNotaFiscal",
+                "PermissaoVerComandas",
+                "PermissaoCriarComanda"
             ]
         },
         "github_com_merka_api_internal_domain.PermissionCatalogo": {
@@ -3486,6 +3629,32 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.comandaVisaoGeralResponse": {
+            "type": "object",
+            "properties": {
+                "aberta_em": {
+                    "type": "string"
+                },
+                "codigo_fisico": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "mesa": {
+                    "type": "string"
+                },
+                "quantidade_itens": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "valor_total": {
+                    "type": "number"
+                }
+            }
+        },
         "internal_handler.configurarPrecoPesoRequest": {
             "type": "object",
             "properties": {
@@ -3494,6 +3663,14 @@ const docTemplate = `{
                 },
                 "tara_kg": {
                     "type": "number"
+                }
+            }
+        },
+        "internal_handler.criarComandaRequest": {
+            "type": "object",
+            "properties": {
+                "codigo_fisico": {
+                    "type": "string"
                 }
             }
         },

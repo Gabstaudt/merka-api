@@ -31,6 +31,19 @@ type Comanda struct {
 	FechadaEm    *time.Time
 }
 
+// ComandaVisaoGeral é uma linha da visão geral "todas as comandas"
+// (ver_comandas): além do status, mostra se há algo dentro dela (itens
+// ativos e valor consolidado) sem precisar abrir cada uma pra conferir.
+type ComandaVisaoGeral struct {
+	ID                uuid.UUID
+	CodigoFisico      string
+	Status            StatusComanda
+	MesaIdentificador *string
+	AbertaEm          *time.Time
+	QuantidadeItens   int
+	ValorTotal        float64
+}
+
 // PodeSerEntregue valida a regra de negócio da US-07:
 // só é possível entregar ao cliente uma comanda disponível.
 func (c *Comanda) PodeSerEntregue() bool {

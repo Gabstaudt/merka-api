@@ -134,6 +134,73 @@ func (r *comandaRepository) LiberarParaReuso(ctx context.Context, comandaID uuid
 	return nil
 }
 
+// ErrCodigoComandaJaExiste é retornado ao tentar criar uma comanda com um
+// codigo_fisico já usado por outra comanda do mesmo tenant
+// (UNIQUE (tenant_id, codigo_fisico)).
+var ErrCodigoComandaJaExiste = errors.New("já existe uma comanda com esse código")
+
+const codigoViolacaoUnicaComanda = "23505"
+
+func (r *comandaRepository) Criar(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error) {
+	const query = `
+		INSERT INTO comandas (tenant_id, codigo_fisico, status)
+		VALUES ($1, $2, $3)
+		RETURNING id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	var c domain.Comanda
+	err := db.QueryRow(ctx, query, tenantID, codigoFisico, domain.StatusDisponivel).Scan(
+		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
+	)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == codigoViolacaoUnicaComanda {
+			return nil, ErrCodigoComandaJaExiste
+		}
+		return nil, fmt.Errorf("gravar comanda: %w", err)
+	}
+
+	return &c, nil
+}
+
+func (r *comandaRepository) ListarTodas(ctx context.Context, tenantID uuid.UUID) ([]domain.ComandaVisaoGeral, error) {
+	const query = `
+		SELECT
+			c.id, c.codigo_fisico, c.status, t.identificador, c.aberta_em,
+			COUNT(oi.id) FILTER (WHERE oi.status = 'ativo'),
+			COALESCE(SUM(oi.valor) FILTER (WHERE oi.status = 'ativo'), 0)
+		FROM comandas c
+		LEFT JOIN tables t ON t.id = c.table_id
+		LEFT JOIN order_items oi ON oi.comanda_id = c.id
+		WHERE c.tenant_id = $1
+		GROUP BY c.id, c.codigo_fisico, c.status, t.identificador, c.aberta_em
+		ORDER BY c.codigo_fisico
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	rows, err := db.Query(ctx, query, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("listar todas as comandas: %w", err)
+	}
+	defer rows.Close()
+
+	var comandas []domain.ComandaVisaoGeral
+	for rows.Next() {
+		var c domain.ComandaVisaoGeral
+		if err := rows.Scan(&c.ID, &c.CodigoFisico, &c.Status, &c.MesaIdentificador, &c.AbertaEm, &c.QuantidadeItens, &c.ValorTotal); err != nil {
+			return nil, fmt.Errorf("ler linha de comanda: %w", err)
+		}
+		comandas = append(comandas, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listar todas as comandas: %w", err)
+	}
+
+	return comandas, nil
+}
+
 func (r *comandaRepository) AtualizarMesa(ctx context.Context, comandaID, tableID uuid.UUID) error {
 	const query = `UPDATE comandas SET table_id = $1 WHERE id = $2`
 

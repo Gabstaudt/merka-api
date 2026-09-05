@@ -161,9 +161,12 @@ func main() {
 	emitirNotaFiscal := usecase.NewEmitirNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo, productRepo, orderItemRepo, conexaoTenantProvider)
 	fecharPagamento := usecase.NewFecharPagamento(comandaRepo, orderItemRepo, paymentRepo, discountRepo, emitirNotaFiscal)
 	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
+	listarTodasComandas := usecase.NewListarTodasComandas(comandaRepo)
+	criarComanda := usecase.NewCriarComanda(comandaRepo)
 
 	comandaHandler := handler.NewComandaHandler(
 		consultarComanda, listarItensComanda, abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
+		listarTodasComandas, criarComanda,
 		auditWriter, hub, permissionRepo, rateLimitEscritaCritica,
 	)
 	comandaHandler.RegistrarRotas(protegidas)

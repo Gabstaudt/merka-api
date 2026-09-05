@@ -20,6 +20,7 @@ type PaymentHandler struct {
 	fecharPagamento          *usecase.FecharPagamento
 	cancelarNotaFiscal       *usecase.CancelarNotaFiscal
 	localizarNotasPorComanda *usecase.LocalizarNotasPorComanda
+	enviarNotaPorEmail       *usecase.EnviarNotaPorEmail
 	auditWriter              *audit.Writer
 	hub                      *ws.Hub
 	permRepo                 repository.PermissionRepository
@@ -30,6 +31,7 @@ func NewPaymentHandler(
 	fecharPagamento *usecase.FecharPagamento,
 	cancelarNotaFiscal *usecase.CancelarNotaFiscal,
 	localizarNotasPorComanda *usecase.LocalizarNotasPorComanda,
+	enviarNotaPorEmail *usecase.EnviarNotaPorEmail,
 	auditWriter *audit.Writer,
 	hub *ws.Hub,
 	permRepo repository.PermissionRepository,
@@ -39,6 +41,7 @@ func NewPaymentHandler(
 		fecharPagamento:          fecharPagamento,
 		cancelarNotaFiscal:       cancelarNotaFiscal,
 		localizarNotasPorComanda: localizarNotasPorComanda,
+		enviarNotaPorEmail:       enviarNotaPorEmail,
 		auditWriter:              auditWriter,
 		hub:                      hub,
 		permRepo:                 permRepo,
@@ -58,6 +61,76 @@ func (h *PaymentHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/pagamentos", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoProcessarPagamento), h.Fechar)
 	router.Post("/pagamentos/:id/cancelar-nota", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.CancelarNota)
 	router.Get("/comandas/:id/notas-fiscais", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.NotasFiscaisDaComanda)
+	router.Post("/pagamentos/:id/enviar-nota", middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarNotaFiscal), h.EnviarNota)
+}
+
+type enviarNotaRequest struct {
+	Canal   string `json:"canal"`
+	Destino string `json:"destino"`
+}
+
+// EnviarNota godoc
+// @Summary      Reenviar cupom/nota já emitida por e-mail (US-14/US-19)
+// @Description  Restrito a Caixa/Gestor/Admin Super (permissão "cancelar_nota_fiscal", mesma dupla de US-22). Canal "email" envia de verdade (real via SMTP se EMAIL_PROVIDER=smtp, ou simulado em dev); canal "whatsapp" ainda não tem integração com nenhum provedor externo e é recusado com uma mensagem clara, nunca simulado como enviado.
+// @Tags         pagamentos
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        id    path      string             true  "ID do payment"
+// @Param        body  body      enviarNotaRequest  true  "Canal (email|whatsapp) e destino"
+// @Success      204
+// @Failure      400   {object}  map[string]string  "canal inválido, destino obrigatório, ou nota não emitida"
+// @Failure      401   {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403   {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      404   {object}  map[string]string  "nenhuma nota fiscal encontrada pra esse pagamento"
+// @Failure      500   {object}  map[string]string  "erro interno"
+// @Failure      501   {object}  map[string]string  "canal whatsapp ainda não implementado"
+// @Router       /pagamentos/{id}/enviar-nota [post]
+func (h *PaymentHandler) EnviarNota(c *fiber.Ctx) error {
+	paymentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de payment inválido"})
+	}
+
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	var req enviarNotaRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "corpo da requisição inválido"})
+	}
+
+	if req.Canal == "whatsapp" {
+		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+			"erro": "envio por WhatsApp ainda não está integrado a nenhum provedor externo (ex: Twilio, Meta Business API) — não é possível confirmar a entrega, então esta ação não simula sucesso",
+		})
+	}
+	if req.Canal != "email" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "canal inválido — use \"email\""})
+	}
+
+	dadosAuditoria := map[string]any{"payment_id": paymentID, "canal": req.Canal, "destino": req.Destino}
+
+	_, err = audit.Executar(c.UserContext(), h.auditWriter, "enviar_nota_fiscal", tenantID, userID, dadosAuditoria,
+		func() (*uuid.UUID, *uuid.UUID, error) {
+			err := h.enviarNotaPorEmail.Executar(c.UserContext(), tenantID, paymentID, req.Destino)
+			return nil, nil, err
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecase.ErrDestinoEmailObrigatorio), errors.Is(err, usecase.ErrNotaNaoPodeSerReenviada):
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": err.Error()})
+		case errors.Is(err, postgres.ErrFiscalReceiptNaoEncontrado):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "nenhuma nota fiscal encontrada pra esse pagamento"})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 type pagamentoParcialRequest struct {

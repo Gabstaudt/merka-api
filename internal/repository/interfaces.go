@@ -58,10 +58,28 @@ type ComandaRepository interface {
 // (US-16) — usado pela tela do Garçom para listar mesas ocupadas e
 // escolher a mesa de destino de uma transferência.
 type TableRepository interface {
-	// ListarComComandaAtiva lista todas as mesas do tenant, com TODAS as
+	// ListarComComandaAtiva lista as mesas ATIVAS do tenant, com TODAS as
 	// comandas em_uso associadas a cada uma (uma mesa pode ter mais de uma
 	// comanda em_uso ao mesmo tempo — mesa livre vem com Comandas vazio).
+	// Usado pelo Garçom (US-16) — mesa desativada nunca aparece aqui.
 	ListarComComandaAtiva(ctx context.Context, tenantID uuid.UUID) ([]domain.TableComComandas, error)
+
+	// ListarTodas lista todas as mesas do tenant, ativas e inativas — usado
+	// pela tela de gestão de mesas (Configurações).
+	ListarTodas(ctx context.Context, tenantID uuid.UUID) ([]domain.Table, error)
+
+	// Criar grava uma mesa nova (sempre ativa).
+	Criar(ctx context.Context, table *domain.Table) error
+
+	// Atualizar renomeia uma mesa existente.
+	Atualizar(ctx context.Context, tenantID, tableID uuid.UUID, identificador string) error
+
+	// Desativar marca ativo=false — nunca DELETE, comandas históricas
+	// podem referenciar table_id.
+	Desativar(ctx context.Context, tenantID, tableID uuid.UUID) error
+
+	// Reativar marca ativo=true — desfaz Desativar.
+	Reativar(ctx context.Context, tenantID, tableID uuid.UUID) error
 }
 
 // UserRepository define o contrato de persistência para usuários —
@@ -283,6 +301,11 @@ type FiscalReceiptRepository interface {
 	// SyncAlertRepository.RegistrarContingenciaRejeitada, disparado junto).
 	RegistrarContingenciaRejeitada(ctx context.Context, tenantID, paymentID uuid.UUID, motivo string) error
 
+	// RegistrarEnvioEmail marca que o cupom/nota foi reenviado por e-mail
+	// pra um destino — só chamado depois que o envio de verdade deu certo
+	// (ver internal/notificacao).
+	RegistrarEnvioEmail(ctx context.Context, tenantID, paymentID uuid.UUID, destino string) error
+
 	// BuscarPorComanda localiza os fiscal_receipts ligados a uma comanda
 	// (via payment_comandas), mais recente primeiro — usado pelo Caixa
 	// (US-22) pra localizar a nota de uma comanda específica antes de
@@ -370,6 +393,18 @@ type AuditLogFiltro struct {
 	DataFim    *time.Time
 	Limit      int
 	Offset     int
+}
+
+// PricingRuleRepository define o contrato de persistência para regras de
+// precificação do tenant (taxa de serviço, rodízio por pessoa etc — ver
+// migrations/0003_pricing_rules.sql e domain/pricing_rule.go).
+type PricingRuleRepository interface {
+	// Listar lista todas as regras do tenant.
+	Listar(ctx context.Context, tenantID uuid.UUID) ([]domain.PricingRule, error)
+
+	// Salvar cria ou atualiza (upsert por tenant_id+chave) uma regra —
+	// nunca duplica: editar sempre atualiza a linha existente.
+	Salvar(ctx context.Context, tenantID uuid.UUID, chave string, configuracao map[string]any, ativo bool) (*domain.PricingRule, error)
 }
 
 // RelatorioRepository define as consultas agregadas usadas por GET

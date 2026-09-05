@@ -95,6 +95,28 @@ func (r *fiscalReceiptRepository) BuscarPorPaymentID(ctx context.Context, tenant
 	return &f, nil
 }
 
+// RegistrarEnvioEmail marca que o cupom/nota foi reenviado por e-mail —
+// só chamado depois que o envio de verdade (internal/notificacao) deu
+// certo.
+func (r *fiscalReceiptRepository) RegistrarEnvioEmail(ctx context.Context, tenantID, paymentID uuid.UUID, destino string) error {
+	const query = `
+		UPDATE fiscal_receipts
+		SET email_enviado = true, email_destino = $1
+		WHERE tenant_id = $2 AND payment_id = $3
+	`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, destino, tenantID, paymentID)
+	if err != nil {
+		return fmt.Errorf("gravar envio de e-mail: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrFiscalReceiptNaoEncontrado
+	}
+
+	return nil
+}
+
 // BuscarPorComanda localiza os fiscal_receipts ligados a uma comanda via
 // payment_comandas (uma comanda pode ter mais de um payment histórico —
 // ex: pagamento misto gera um payment por método, ver FecharPagamento) —

@@ -16,6 +16,7 @@ import (
 	"github.com/merka/api/internal/fiscal"
 	"github.com/merka/api/internal/handler"
 	"github.com/merka/api/internal/middleware"
+	"github.com/merka/api/internal/notificacao"
 	"github.com/merka/api/internal/repository/postgres"
 	"github.com/merka/api/internal/usecase"
 	"github.com/merka/api/internal/ws"
@@ -128,6 +129,11 @@ func main() {
 	consultarComanda := usecase.NewConsultarComanda(comandaRepo)
 	listarItensComanda := usecase.NewListarItensComanda(orderItemRepo)
 	listarMesas := usecase.NewListarMesas(tableRepo)
+	listarTodasMesas := usecase.NewListarTodasMesas(tableRepo)
+	criarMesa := usecase.NewCriarMesa(tableRepo)
+	editarMesa := usecase.NewEditarMesa(tableRepo)
+	desativarMesa := usecase.NewDesativarMesa(tableRepo)
+	reativarMesa := usecase.NewReativarMesa(tableRepo)
 	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
@@ -162,8 +168,14 @@ func main() {
 	)
 	comandaHandler.RegistrarRotas(protegidas)
 
-	tableHandler := handler.NewTableHandler(listarMesas)
+	tableHandler := handler.NewTableHandler(listarMesas, listarTodasMesas, criarMesa, editarMesa, desativarMesa, reativarMesa, auditWriter, permissionRepo)
 	tableHandler.RegistrarRotas(protegidas)
+
+	pricingRuleRepo := postgres.NewPricingRuleRepository(pool)
+	listarConfiguracoes := usecase.NewListarConfiguracoes(pricingRuleRepo)
+	salvarConfiguracao := usecase.NewSalvarConfiguracao(pricingRuleRepo)
+	pricingRuleHandler := handler.NewPricingRuleHandler(listarConfiguracoes, salvarConfiguracao, auditWriter, permissionRepo)
+	pricingRuleHandler.RegistrarRotas(protegidas)
 
 	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
 	orderItemHandler.RegistrarRotas(protegidas)
@@ -177,7 +189,17 @@ func main() {
 	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, listarPermissoesDoPerfil, auditWriter, permissionRepo)
 	roleHandler.RegistrarRotas(protegidas)
 
-	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, localizarNotasPorComanda, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
+	var emailSender notificacao.EmailSender
+	if cfg.EmailProvider == "smtp" {
+		emailSender = notificacao.NewSMTPEmailSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPassword, cfg.SMTPFrom)
+		log.Printf("notificacao: enviando e-mail via SMTP real (%s)", cfg.SMTPHost)
+	} else {
+		emailSender = notificacao.NewMockEmailSender()
+		log.Printf("notificacao: enviando e-mail via MockEmailSender (defina EMAIL_PROVIDER=smtp pra usar SMTP real)")
+	}
+	enviarNotaPorEmail := usecase.NewEnviarNotaPorEmail(fiscalReceiptRepo, emailSender)
+
+	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, localizarNotasPorComanda, enviarNotaPorEmail, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
 	paymentHandler.RegistrarRotas(protegidas)
 
 	obterPerfilAcesso := usecase.NewObterPerfilAcesso(permissionRepo)

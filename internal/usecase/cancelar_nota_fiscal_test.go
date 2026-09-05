@@ -194,3 +194,6 @@ func (f *fakeFiscalReceiptRepoComReceipt) RegistrarCancelamento(_ context.Contex
 func (f *fakeFiscalReceiptRepoComReceipt) BuscarPorComanda(context.Context, uuid.UUID, uuid.UUID) ([]domain.FiscalReceipt, error) {
 	return nil, nil
 }
+func (f *fakeFiscalReceiptRepoComReceipt) RegistrarEnvioEmail(context.Context, uuid.UUID, uuid.UUID, string) error {
+	return nil
+}

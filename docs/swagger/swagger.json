@@ -931,6 +931,143 @@
                 }
             }
         },
+        "/configuracoes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Taxa de serviço, rodízio por pessoa e outras regras de precificação (pricing_rules).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configuracoes"
+                ],
+                "summary": "Listar configurações estruturais do tenant (Configurações)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler.pricingRuleResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/configuracoes/{chave}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Upsert por chave — nunca duplica, sempre substitui a configuração inteira da chave informada.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "configuracoes"
+                ],
+                "summary": "Criar ou atualizar uma configuração (Configurações)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chave da configuração (ex: taxa_servico, rodizio_por_pessoa)",
+                        "name": "chave",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Configuração e se está ativa",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.salvarConfiguracaoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.pricingRuleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "chave obrigatória",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/me": {
             "get": {
                 "security": [
@@ -981,7 +1118,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lista todas as mesas do tenant, com as comandas em_uso associadas quando houver (uma mesa pode ter mais de uma) — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.",
+                "description": "Lista as mesas ATIVAS do tenant, com as comandas em_uso associadas quando houver (uma mesa pode ter mais de uma) — usado pelo Garçom pra ver mesas ocupadas e escolher a mesa de destino de uma transferência.",
                 "produces": [
                     "application/json"
                 ],
@@ -1001,6 +1138,368 @@
                     },
                     "401": {
                         "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Cadastrar mesa nova (Configurações)",
+                "parameters": [
+                    {
+                        "description": "Identificador da mesa",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.mesaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.mesaCompletaResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "identificador obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe uma mesa com esse identificador",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mesas/todas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Listar todas as mesas, ativas e inativas (Configurações)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler.mesaCompletaResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mesas/{id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Renomear mesa (Configurações)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da mesa",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Novo identificador",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.mesaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "identificador obrigatório",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "mesa não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "já existe uma mesa com esse identificador",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mesas/{id}/desativar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Nunca deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas continuam referenciando ela normalmente.",
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Desativar mesa (Configurações)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da mesa",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "mesa não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/mesas/{id}/reativar": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Desfaz Desativar.",
+                "tags": [
+                    "mesas"
+                ],
+                "summary": "Reativar mesa desativada (Configurações)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da mesa",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "mesa não encontrada",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1457,6 +1956,103 @@
                     },
                     "500": {
                         "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/pagamentos/{id}/enviar-nota": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Caixa/Gestor/Admin Super (permissão \"cancelar_nota_fiscal\", mesma dupla de US-22). Canal \"email\" envia de verdade (real via SMTP se EMAIL_PROVIDER=smtp, ou simulado em dev); canal \"whatsapp\" ainda não tem integração com nenhum provedor externo e é recusado com uma mensagem clara, nunca simulado como enviado.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pagamentos"
+                ],
+                "summary": "Reenviar cupom/nota já emitida por e-mail (US-14/US-19)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do payment",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Canal (email|whatsapp) e destino",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.enviarNotaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "canal inválido, destino obrigatório, ou nota não emitida",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "nenhuma nota fiscal encontrada pra esse pagamento",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "501": {
+                        "description": "canal whatsapp ainda não implementado",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -2936,6 +3532,17 @@
                 }
             }
         },
+        "internal_handler.enviarNotaRequest": {
+            "type": "object",
+            "properties": {
+                "canal": {
+                    "type": "string"
+                },
+                "destino": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.fecharPagamentoRequest": {
             "type": "object",
             "properties": {
@@ -3014,6 +3621,28 @@
                 }
             }
         },
+        "internal_handler.mesaCompletaResponse": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "identificador": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.mesaRequest": {
+            "type": "object",
+            "properties": {
+                "identificador": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.mesaResponse": {
             "type": "object",
             "properties": {
@@ -3070,6 +3699,24 @@
                 }
             }
         },
+        "internal_handler.pricingRuleResponse": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "chave": {
+                    "type": "string"
+                },
+                "configuracao": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.registrarPesoRequest": {
             "type": "object",
             "properties": {
@@ -3078,6 +3725,18 @@
                 },
                 "product_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_handler.salvarConfiguracaoRequest": {
+            "type": "object",
+            "properties": {
+                "ativo": {
+                    "type": "boolean"
+                },
+                "configuracao": {
+                    "type": "object",
+                    "additionalProperties": {}
                 }
             }
         },

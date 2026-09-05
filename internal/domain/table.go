@@ -2,12 +2,15 @@ package domain
 
 import "github.com/google/uuid"
 
-// Table é uma mesa do salão — hoje só carrega o identificador visível ao
-// cliente/garçom (ex: "Mesa 5"); ver migrations/0001_init.sql.
+// Table é uma mesa do salão — identificador visível ao cliente/garçom
+// (ex: "Mesa 5"); ver migrations/0001_init.sql. Ativo=false (migration
+// 0024) marca uma mesa desativada — nunca DELETE físico, já que comandas
+// históricas podem referenciar table_id.
 type Table struct {
 	ID            uuid.UUID
 	TenantID      uuid.UUID
 	Identificador string
+	Ativo         bool
 }
 
 // ComandaResumo é a projeção mínima de uma comanda usada dentro de

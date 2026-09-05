@@ -444,6 +444,13 @@ definitions:
           type: string
         type: array
     type: object
+  internal_handler.enviarNotaRequest:
+    properties:
+      canal:
+        type: string
+      destino:
+        type: string
+    type: object
   internal_handler.fecharPagamentoRequest:
     properties:
       comanda_ids:
@@ -494,6 +501,20 @@ definitions:
       user_id:
         type: string
     type: object
+  internal_handler.mesaCompletaResponse:
+    properties:
+      ativo:
+        type: boolean
+      id:
+        type: string
+      identificador:
+        type: string
+    type: object
+  internal_handler.mesaRequest:
+    properties:
+      identificador:
+        type: string
+    type: object
   internal_handler.mesaResponse:
     properties:
       comandas:
@@ -530,12 +551,32 @@ definitions:
       valor:
         type: number
     type: object
+  internal_handler.pricingRuleResponse:
+    properties:
+      ativo:
+        type: boolean
+      chave:
+        type: string
+      configuracao:
+        additionalProperties: {}
+        type: object
+      id:
+        type: string
+    type: object
   internal_handler.registrarPesoRequest:
     properties:
       peso_bruto:
         type: number
       product_id:
         type: string
+    type: object
+  internal_handler.salvarConfiguracaoRequest:
+    properties:
+      ativo:
+        type: boolean
+      configuracao:
+        additionalProperties: {}
+        type: object
     type: object
   internal_handler.transferirMesaRequest:
     properties:
@@ -1186,6 +1227,97 @@ paths:
       summary: Registrar peso de item na comanda (US-09)
       tags:
       - comandas
+  /configuracoes:
+    get:
+      description: Restrito a Admin Super (permissão "configurar_sistema"). Taxa de
+        serviço, rodízio por pessoa e outras regras de precificação (pricing_rules).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler.pricingRuleResponse'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar configurações estruturais do tenant (Configurações)
+      tags:
+      - configuracoes
+  /configuracoes/{chave}:
+    put:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super (permissão "configurar_sistema"). Upsert
+        por chave — nunca duplica, sempre substitui a configuração inteira da chave
+        informada.
+      parameters:
+      - description: 'Chave da configuração (ex: taxa_servico, rodizio_por_pessoa)'
+        in: path
+        name: chave
+        required: true
+        type: string
+      - description: Configuração e se está ativa
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.salvarConfiguracaoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_handler.pricingRuleResponse'
+        "400":
+          description: chave obrigatória
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Criar ou atualizar uma configuração (Configurações)
+      tags:
+      - configuracoes
   /me:
     get:
       description: Sem restrição de permissão — qualquer usuário autenticado vê as
@@ -1217,7 +1349,7 @@ paths:
       - auth
   /mesas:
     get:
-      description: Lista todas as mesas do tenant, com as comandas em_uso associadas
+      description: Lista as mesas ATIVAS do tenant, com as comandas em_uso associadas
         quando houver (uma mesa pode ter mais de uma) — usado pelo Garçom pra ver
         mesas ocupadas e escolher a mesa de destino de uma transferência.
       produces:
@@ -1244,6 +1376,242 @@ paths:
       security:
       - BearerAuth: []
       summary: Listar mesas do salão (US-16)
+      tags:
+      - mesas
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super (permissão "configurar_sistema").
+      parameters:
+      - description: Identificador da mesa
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.mesaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal_handler.mesaCompletaResponse'
+        "400":
+          description: identificador obrigatório
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: já existe uma mesa com esse identificador
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cadastrar mesa nova (Configurações)
+      tags:
+      - mesas
+  /mesas/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: Restrito a Admin Super (permissão "configurar_sistema").
+      parameters:
+      - description: ID da mesa
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Novo identificador
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.mesaRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: identificador obrigatório
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: mesa não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: já existe uma mesa com esse identificador
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Renomear mesa (Configurações)
+      tags:
+      - mesas
+  /mesas/{id}/desativar:
+    patch:
+      description: Restrito a Admin Super (permissão "configurar_sistema"). Nunca
+        deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas
+        continuam referenciando ela normalmente.
+      parameters:
+      - description: ID da mesa
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: mesa não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Desativar mesa (Configurações)
+      tags:
+      - mesas
+  /mesas/{id}/reativar:
+    patch:
+      description: Restrito a Admin Super (permissão "configurar_sistema"). Desfaz
+        Desativar.
+      parameters:
+      - description: ID da mesa
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: mesa não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reativar mesa desativada (Configurações)
+      tags:
+      - mesas
+  /mesas/todas:
+    get:
+      description: Restrito a Admin Super (permissão "configurar_sistema").
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_handler.mesaCompletaResponse'
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar todas as mesas, ativas e inativas (Configurações)
       tags:
       - mesas
   /notas-fiscais:
@@ -1550,6 +1918,73 @@ paths:
       security:
       - BearerAuth: []
       summary: Cancelar NFC-e já emitida, dentro do prazo (US-22)
+      tags:
+      - pagamentos
+  /pagamentos/{id}/enviar-nota:
+    post:
+      consumes:
+      - application/json
+      description: Restrito a Caixa/Gestor/Admin Super (permissão "cancelar_nota_fiscal",
+        mesma dupla de US-22). Canal "email" envia de verdade (real via SMTP se EMAIL_PROVIDER=smtp,
+        ou simulado em dev); canal "whatsapp" ainda não tem integração com nenhum
+        provedor externo e é recusado com uma mensagem clara, nunca simulado como
+        enviado.
+      parameters:
+      - description: ID do payment
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Canal (email|whatsapp) e destino
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_handler.enviarNotaRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: canal inválido, destino obrigatório, ou nota não emitida
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: nenhuma nota fiscal encontrada pra esse pagamento
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "501":
+          description: canal whatsapp ainda não implementado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reenviar cupom/nota já emitida por e-mail (US-14/US-19)
       tags:
       - pagamentos
   /perfis:

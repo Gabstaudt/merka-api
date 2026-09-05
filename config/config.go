@@ -40,6 +40,17 @@ type Config struct {
 	// bastante pra não confundir rede lenta com indisponibilidade de
 	// verdade.
 	FiscalSefazTimeout time.Duration
+
+	// EmailProvider seleciona a implementação de notificacao.EmailSender
+	// usada pra reenviar cupom/nota por e-mail: "mock" (padrão, simula
+	// sucesso sem falar com SMTP nenhum) ou "smtp" (real). Mesmo racional
+	// de FiscalProvider.
+	EmailProvider string
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUser      string
+	SMTPPassword  string
+	SMTPFrom      string
 }
 
 func Load() Config {
@@ -52,6 +63,12 @@ func Load() Config {
 		FiscalProvider:     getEnv("FISCAL_PROVIDER", "mock"),
 		FiscalAmbiente:     getEnv("FISCAL_AMBIENTE", "homologacao"),
 		FiscalSefazTimeout: getEnvSegundos("FISCAL_SEFAZ_TIMEOUT_SEGUNDOS", 8),
+		EmailProvider:      getEnv("EMAIL_PROVIDER", "mock"),
+		SMTPHost:           getEnv("SMTP_HOST", ""),
+		SMTPPort:           getEnv("SMTP_PORT", "587"),
+		SMTPUser:           getEnv("SMTP_USER", ""),
+		SMTPPassword:       getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:           getEnv("SMTP_FROM", ""),
 	}
 }
 

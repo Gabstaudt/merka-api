@@ -427,6 +427,9 @@ func (f *fakeFiscalReceiptRepo) RegistrarCancelamento(_ context.Context, _, _ uu
 func (f *fakeFiscalReceiptRepo) BuscarPorComanda(_ context.Context, _, _ uuid.UUID) ([]domain.FiscalReceipt, error) {
 	return nil, nil
 }
+func (f *fakeFiscalReceiptRepo) RegistrarEnvioEmail(context.Context, uuid.UUID, uuid.UUID, string) error {
+	return nil
+}
 
 // fakeConexaoTenantProvider satisfaz repository.ConexaoTenantProvider sem
 // tocar em Postgres — devolve o próprio ctx recebido (os fakes deste

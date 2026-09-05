@@ -80,6 +80,42 @@ func (r *permissionRepository) BuscarIDsPorChaves(ctx context.Context, chaves []
 	return resultado, nil
 }
 
+// ListarChavesDoUsuario lista todas as chaves de permissão do usuário
+// (via role_permissions do role dele) — ver GET /me,
+// internal/handler/me_handler.go.
+func (r *permissionRepository) ListarChavesDoUsuario(ctx context.Context, userID uuid.UUID) ([]domain.Permissao, error) {
+	const query = `
+		SELECT p.chave
+		FROM users u
+		JOIN role_permissions rp ON rp.role_id = u.role_id
+		JOIN permissions p ON p.id = rp.permission_id
+		WHERE u.id = $1
+		ORDER BY p.chave
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listar chaves de permissao do usuario: %w", err)
+	}
+	defer rows.Close()
+
+	var chaves []domain.Permissao
+	for rows.Next() {
+		var chave string
+		if err := rows.Scan(&chave); err != nil {
+			return nil, fmt.Errorf("ler chave de permissao: %w", err)
+		}
+		chaves = append(chaves, domain.Permissao(chave))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar chaves de permissao: %w", err)
+	}
+
+	return chaves, nil
+}
+
 func (r *permissionRepository) ListarCatalogo(ctx context.Context) ([]domain.PermissionCatalogo, error) {
 	const query = `SELECT id, chave, descricao FROM permissions ORDER BY chave`
 

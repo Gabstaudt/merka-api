@@ -179,6 +179,10 @@ func main() {
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, localizarNotasPorComanda, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)
 	paymentHandler.RegistrarRotas(protegidas)
 
+	obterPerfilAcesso := usecase.NewObterPerfilAcesso(permissionRepo)
+	meHandler := handler.NewMeHandler(obterPerfilAcesso)
+	meHandler.RegistrarRotas(protegidas)
+
 	auditLogHandler := handler.NewAuditLogHandler(consultarAuditoria, permissionRepo)
 	auditLogHandler.RegistrarRotas(protegidas)
 

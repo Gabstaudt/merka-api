@@ -938,6 +938,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sem restrição de permissão — qualquer usuário autenticado vê as próprias permissões. Usado pelo frontend pra decidir o que mostrar na navegação (nunca pelo nome do perfil, que é customizável).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Permissões do usuário autenticado",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.meResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/mesas": {
             "get": {
                 "security": [
@@ -2895,6 +2938,23 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handler.meResponse": {
+            "type": "object",
+            "properties": {
+                "permissoes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "user_id": {
                     "type": "string"
                 }
             }

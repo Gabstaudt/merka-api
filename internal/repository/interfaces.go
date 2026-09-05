@@ -315,6 +315,14 @@ type PermissionRepository interface {
 	// ListarCatalogo lista todo o catálogo fixo de permissões (GET
 	// /permissoes, US-02).
 	ListarCatalogo(ctx context.Context) ([]domain.PermissionCatalogo, error)
+
+	// ListarChavesDoUsuario lista todas as chaves de permissão que o
+	// usuário tem (via seu role_id) — usado por GET /me pro frontend
+	// decidir o que mostrar na navegação com base na PERMISSÃO real do
+	// usuário, nunca no nome do role (perfis são customizáveis — dois
+	// usuários com nomes de perfil diferentes podem ter exatamente as
+	// mesmas permissões, e vice-versa).
+	ListarChavesDoUsuario(ctx context.Context, userID uuid.UUID) ([]domain.Permissao, error)
 }
 
 // DiscountRepository define o contrato de persistência para descontos

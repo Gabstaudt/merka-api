@@ -102,6 +102,13 @@ type RoleRepository interface {
 	// role e grava o conjunto novo — usado tanto na criação (role novo,
 	// sem permissões ainda) quanto na edição (US-02) de um perfil.
 	SubstituirPermissoes(ctx context.Context, roleID uuid.UUID, permissionIDs []uuid.UUID) error
+
+	// ListarPermissoesDoRole lista as chaves de permissão já atribuídas a
+	// um role — usado pela tela de edição de perfil (US-02) pra
+	// pré-marcar os checkboxes com o que o perfil já tem, antes do
+	// operador mudar algo e mandar o conjunto completo de volta via
+	// SubstituirPermissoes (PUT substitui tudo, não faz diff).
+	ListarPermissoesDoRole(ctx context.Context, roleID uuid.UUID) ([]domain.Permissao, error)
 }
 
 // ProductRepository define o contrato de persistência para o catálogo de

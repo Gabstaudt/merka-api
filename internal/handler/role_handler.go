@@ -17,12 +17,13 @@ import (
 // RoleHandler expõe as rotas de perfis (roles) e do catálogo fixo de
 // permissões (US-02).
 type RoleHandler struct {
-	criarPerfil            *usecase.CriarPerfil
-	editarPermissoesPerfil *usecase.EditarPermissoesPerfil
-	listarPerfis           *usecase.ListarPerfis
-	listarPermissoes       *usecase.ListarPermissoes
-	auditWriter            *audit.Writer
-	permRepo               repository.PermissionRepository
+	criarPerfil              *usecase.CriarPerfil
+	editarPermissoesPerfil   *usecase.EditarPermissoesPerfil
+	listarPerfis             *usecase.ListarPerfis
+	listarPermissoes         *usecase.ListarPermissoes
+	listarPermissoesDoPerfil *usecase.ListarPermissoesDoPerfil
+	auditWriter              *audit.Writer
+	permRepo                 repository.PermissionRepository
 }
 
 func NewRoleHandler(
@@ -30,16 +31,18 @@ func NewRoleHandler(
 	editarPermissoesPerfil *usecase.EditarPermissoesPerfil,
 	listarPerfis *usecase.ListarPerfis,
 	listarPermissoes *usecase.ListarPermissoes,
+	listarPermissoesDoPerfil *usecase.ListarPermissoesDoPerfil,
 	auditWriter *audit.Writer,
 	permRepo repository.PermissionRepository,
 ) *RoleHandler {
 	return &RoleHandler{
-		criarPerfil:            criarPerfil,
-		editarPermissoesPerfil: editarPermissoesPerfil,
-		listarPerfis:           listarPerfis,
-		listarPermissoes:       listarPermissoes,
-		auditWriter:            auditWriter,
-		permRepo:               permRepo,
+		criarPerfil:              criarPerfil,
+		editarPermissoesPerfil:   editarPermissoesPerfil,
+		listarPerfis:             listarPerfis,
+		listarPermissoes:         listarPermissoes,
+		listarPermissoesDoPerfil: listarPermissoesDoPerfil,
+		auditWriter:              auditWriter,
+		permRepo:                 permRepo,
 	}
 }
 
@@ -53,8 +56,40 @@ func NewRoleHandler(
 func (h *RoleHandler) RegistrarRotas(router fiber.Router) {
 	router.Get("/perfis", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarUsuario), h.ListarPerfis)
 	router.Get("/permissoes", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarUsuario), h.ListarPermissoes)
+	router.Get("/perfis/:id/permissoes", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarPerfil), h.ListarPermissoesDoPerfil)
 	router.Post("/perfis", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarPerfil), h.Criar)
 	router.Put("/perfis/:id/permissoes", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarPerfil), h.EditarPermissoes)
+}
+
+// ListarPermissoesDoPerfil godoc
+// @Summary      Listar as permissões já atribuídas a um perfil (US-02)
+// @Description  Restrito a Admin Super (permissão "criar_perfil"). Usado pra pré-marcar os checkboxes na tela de edição, já que PUT /perfis/:id/permissoes substitui o conjunto inteiro.
+// @Tags         perfis
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id  path      string  true  "ID do perfil"
+// @Success      200  {array}   string
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403  {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /perfis/{id}/permissoes [get]
+func (h *RoleHandler) ListarPermissoesDoPerfil(c *fiber.Ctx) error {
+	roleID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de perfil inválido"})
+	}
+
+	permissoes, err := h.listarPermissoesDoPerfil.Executar(c.UserContext(), roleID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+	}
+
+	chaves := make([]string, len(permissoes))
+	for i, p := range permissoes {
+		chaves[i] = string(p)
+	}
+
+	return c.JSON(chaves)
 }
 
 // criarPerfilRequest é o corpo de POST /perfis.

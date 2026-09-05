@@ -120,3 +120,37 @@ func (r *roleRepository) SubstituirPermissoes(ctx context.Context, roleID uuid.U
 
 	return nil
 }
+
+// ListarPermissoesDoRole lista as chaves já atribuídas a um role — usado
+// pela tela de edição de perfil (US-02) pra pré-marcar os checkboxes.
+func (r *roleRepository) ListarPermissoesDoRole(ctx context.Context, roleID uuid.UUID) ([]domain.Permissao, error) {
+	const query = `
+		SELECT p.chave
+		FROM role_permissions rp
+		JOIN permissions p ON p.id = rp.permission_id
+		WHERE rp.role_id = $1
+		ORDER BY p.chave
+	`
+
+	db := connFromCtx(ctx, r.pool)
+
+	rows, err := db.Query(ctx, query, roleID)
+	if err != nil {
+		return nil, fmt.Errorf("listar permissoes do role: %w", err)
+	}
+	defer rows.Close()
+
+	var chaves []domain.Permissao
+	for rows.Next() {
+		var chave string
+		if err := rows.Scan(&chave); err != nil {
+			return nil, fmt.Errorf("ler chave de permissao do role: %w", err)
+		}
+		chaves = append(chaves, domain.Permissao(chave))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar permissoes do role: %w", err)
+	}
+
+	return chaves, nil
+}

@@ -1605,6 +1605,68 @@
             }
         },
         "/perfis/{id}/permissoes": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Restrito a Admin Super (permissão \"criar_perfil\"). Usado pra pré-marcar os checkboxes na tela de edição, já que PUT /perfis/:id/permissoes substitui o conjunto inteiro.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "perfis"
+                ],
+                "summary": "Listar as permissões já atribuídas a um perfil (US-02)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do perfil",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
             "put": {
                 "security": [
                     {

@@ -146,6 +146,7 @@ func main() {
 	criarPerfil := usecase.NewCriarPerfil(roleRepo, permissionRepo)
 	editarPermissoesPerfil := usecase.NewEditarPermissoesPerfil(roleRepo, permissionRepo)
 	listarPerfis := usecase.NewListarPerfis(roleRepo)
+	listarPermissoesDoPerfil := usecase.NewListarPermissoesDoPerfil(roleRepo)
 	listarPermissoes := usecase.NewListarPermissoes(permissionRepo)
 	consultarAuditoria := usecase.NewConsultarAuditoria(auditLogRepo)
 	gerarRelatorioVendas := usecase.NewGerarRelatorioVendas(relatorioRepo)
@@ -173,7 +174,7 @@ func main() {
 	userHandler := handler.NewUserHandler(criarUsuario, desativarUsuario, listarUsuarios, auditWriter, permissionRepo)
 	userHandler.RegistrarRotas(protegidas)
 
-	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, auditWriter, permissionRepo)
+	roleHandler := handler.NewRoleHandler(criarPerfil, editarPermissoesPerfil, listarPerfis, listarPermissoes, listarPermissoesDoPerfil, auditWriter, permissionRepo)
 	roleHandler.RegistrarRotas(protegidas)
 
 	paymentHandler := handler.NewPaymentHandler(fecharPagamento, cancelarNotaFiscal, localizarNotasPorComanda, auditWriter, hub, permissionRepo, rateLimitEscritaCritica)

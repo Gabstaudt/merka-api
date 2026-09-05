@@ -1644,6 +1644,48 @@ paths:
       tags:
       - perfis
   /perfis/{id}/permissoes:
+    get:
+      description: Restrito a Admin Super (permissão "criar_perfil"). Usado pra pré-marcar
+        os checkboxes na tela de edição, já que PUT /perfis/:id/permissoes substitui
+        o conjunto inteiro.
+      parameters:
+      - description: ID do perfil
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Listar as permissões já atribuídas a um perfil (US-02)
+      tags:
+      - perfis
     put:
       consumes:
       - application/json

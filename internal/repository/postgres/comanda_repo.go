@@ -81,6 +81,33 @@ func (r *comandaRepository) BuscarPorID(ctx context.Context, tenantID, comandaID
 	return &c, nil
 }
 
+// ErrComandaComHistorico é retornado ao tentar excluir uma comanda que
+// tem QUALQUER histórico (item lançado, desconto, pagamento ou alerta de
+// sincronização — mesmo antigo/estornado) — a exclusão real (DELETE
+// físico) só é permitida pra uma comanda genuinamente vazia; a FK do
+// banco (order_items/discounts/payment_comandas/sync_alerts, sem
+// ON DELETE) garante isso.
+var ErrComandaComHistorico = errors.New("esta comanda tem histórico (itens, pagamentos ou alertas) e não pode ser excluída")
+
+func (r *comandaRepository) Excluir(ctx context.Context, tenantID, comandaID uuid.UUID) error {
+	const query = `DELETE FROM comandas WHERE tenant_id = $1 AND id = $2`
+
+	db := connFromCtx(ctx, r.pool)
+	tag, err := db.Exec(ctx, query, tenantID, comandaID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == codigoViolacaoFK {
+			return ErrComandaComHistorico
+		}
+		return fmt.Errorf("excluir comanda: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrComandaNaoEncontrada
+	}
+
+	return nil
+}
+
 func (r *comandaRepository) AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error {
 	const query = `UPDATE comandas SET status = $1 WHERE id = $2`
 

@@ -31,6 +31,17 @@ type Comanda struct {
 	FechadaEm    *time.Time
 }
 
+// PodeSerExcluida valida a regra de negócio da exclusão (Admin
+// Super/Gestor, permissão excluir_comanda): nunca uma comanda em_uso —
+// zeraria um atendimento em andamento sem passar pelo cancelamento
+// (US-15), que existe justamente pra isso. A outra exigência ("comanda
+// vazia": nunca teve item/pagamento/alerta) não dá pra checar aqui —
+// quem garante isso é a FK do banco (ver
+// repository/postgres/comanda_repo.go, Excluir).
+func (c *Comanda) PodeSerExcluida() bool {
+	return c.Status != StatusEmUso
+}
+
 // ComandaVisaoGeral é uma linha da visão geral "todas as comandas"
 // (ver_comandas): além do status, mostra se há algo dentro dela (itens
 // ativos e valor consolidado) sem precisar abrir cada uma pra conferir.

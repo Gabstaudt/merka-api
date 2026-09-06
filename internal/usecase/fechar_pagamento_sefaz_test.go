@@ -227,6 +227,7 @@ func (f *fakeComandaRepo) ListarTodas(_ context.Context, _ uuid.UUID) ([]domain.
 func (f *fakeComandaRepo) Criar(_ context.Context, _ uuid.UUID, _ string) (*domain.Comanda, error) {
 	return nil, nil
 }
+func (f *fakeComandaRepo) Excluir(_ context.Context, _, _ uuid.UUID) error { return nil }
 
 type fakeOrderItemRepo struct {
 	itens []domain.OrderItem

@@ -27,6 +27,7 @@ type ComandaHandler struct {
 	aplicarDesconto    *usecase.AplicarDesconto
 	listarTodas        *usecase.ListarTodasComandas
 	criarComanda       *usecase.CriarComanda
+	excluirComanda     *usecase.ExcluirComanda
 	auditWriter        *audit.Writer
 	hub                *ws.Hub
 	permRepo           repository.PermissionRepository
@@ -45,6 +46,7 @@ func NewComandaHandler(
 	aplicarDesconto *usecase.AplicarDesconto,
 	listarTodas *usecase.ListarTodasComandas,
 	criarComanda *usecase.CriarComanda,
+	excluirComanda *usecase.ExcluirComanda,
 	auditWriter *audit.Writer,
 	hub *ws.Hub,
 	permRepo repository.PermissionRepository,
@@ -62,6 +64,7 @@ func NewComandaHandler(
 		aplicarDesconto:    aplicarDesconto,
 		listarTodas:        listarTodas,
 		criarComanda:       criarComanda,
+		excluirComanda:     excluirComanda,
 		auditWriter:        auditWriter,
 		hub:                hub,
 		permRepo:           permRepo,
@@ -79,6 +82,7 @@ func NewComandaHandler(
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/comandas", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarComanda), h.Criar)
 	router.Get("/comandas/todas", middleware.RequerPermissao(h.permRepo, domain.PermissaoVerComandas), h.ListarTodas)
+	router.Delete("/comandas/:id", middleware.RequerPermissao(h.permRepo, domain.PermissaoExcluirComanda), h.Excluir)
 	router.Get("/comandas/:codigo", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.ConsultarPorCodigo)
 	router.Get("/comandas/:id/itens", h.ListarItens)
 	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
@@ -210,6 +214,58 @@ func (h *ComandaHandler) Criar(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(comanda)
+}
+
+// Excluir godoc
+// @Summary      Excluir comanda física (Admin Super/Gestor)
+// @Description  Exclusão física de verdade (o código físico deixa de existir e pode ser reaproveitado) — só permitida se a comanda NÃO estiver em uso E não tiver nenhum histórico (item, desconto, pagamento ou alerta). Requer a permissão excluir_comanda.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Param        id  path  string  true  "ID da comanda"
+// @Success      204
+// @Failure      401  {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      403  {object}  map[string]string  "usuário sem permissão para esta ação"
+// @Failure      404  {object}  map[string]string  "comanda não encontrada"
+// @Failure      409  {object}  map[string]string  "comanda está em uso — não pode ser excluída"
+// @Failure      500  {object}  map[string]string  "erro interno"
+// @Router       /comandas/{id} [delete]
+func (h *ComandaHandler) Excluir(c *fiber.Ctx) error {
+	comandaID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"erro": "id de comanda inválido"})
+	}
+
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	dadosAuditoria := map[string]any{"comanda_id": comandaID}
+
+	// Associação à comanda (FK comanda_id de audit_log) é sempre nil
+	// aqui, mesmo em caso de sucesso — a linha de auditoria é gravada
+	// DEPOIS da exclusão física, e a comanda já não existe mais nesse
+	// instante (o id continua rastreável no jsonb `dados` acima).
+	_, err = audit.Executar(c.UserContext(), h.auditWriter, "excluir_comanda", tenantID, userID, dadosAuditoria,
+		func() (*uuid.UUID, *uuid.UUID, error) {
+			err := h.excluirComanda.Executar(c.UserContext(), tenantID, comandaID)
+			return nil, nil, err
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, postgres.ErrComandaNaoEncontrada):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": err.Error()})
+		case errors.Is(err, usecase.ErrComandaEmUsoNaoPodeSerExcluida):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
+		case errors.Is(err, postgres.ErrComandaComHistorico):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // comandaVisaoGeralResponse é a projeção de domain.ComandaVisaoGeral pro JSON.

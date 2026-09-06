@@ -58,6 +58,11 @@ type ComandaRepository interface {
 	// PermissaoCriarComanda). Sempre nasce 'disponivel', sem mesa.
 	Criar(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error)
 
+	// Excluir marca a comanda como inativa (soft-delete, permissão
+	// excluir_comanda) — nunca DELETE físico, já que audit_log referencia
+	// comandas.id. Quem chama já validou Comanda.PodeSerExcluida() antes.
+	Excluir(ctx context.Context, tenantID, comandaID uuid.UUID) error
+
 	// ListarTodas retorna TODAS as comandas do tenant (qualquer status),
 	// com um resumo do que está dentro de cada uma — pra visão geral do
 	// Admin Super/Gestor/Caixa (permissão ver_comandas): quantas comandas

@@ -188,6 +188,7 @@ definitions:
     - cancelar_nota_fiscal
     - ver_comandas
     - criar_comanda
+    - excluir_comanda
     type: string
     x-enum-varnames:
     - PermissaoCriarUsuario
@@ -209,6 +210,7 @@ definitions:
     - PermissaoCancelarNotaFiscal
     - PermissaoVerComandas
     - PermissaoCriarComanda
+    - PermissaoExcluirComanda
   github_com_merka_api_internal_domain.PermissionCatalogo:
     properties:
       chave:
@@ -932,6 +934,56 @@ paths:
       security:
       - BearerAuth: []
       summary: Receber comanda na saída e validar zeramento (US-08)
+      tags:
+      - comandas
+  /comandas/{id}:
+    delete:
+      description: Exclusão física de verdade (o código físico deixa de existir e
+        pode ser reaproveitado) — só permitida se a comanda NÃO estiver em uso E não
+        tiver nenhum histórico (item, desconto, pagamento ou alerta). Requer a permissão
+        excluir_comanda.
+      parameters:
+      - description: ID da comanda
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: usuário sem permissão para esta ação
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda está em uso — não pode ser excluída
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Excluir comanda física (Admin Super/Gestor)
       tags:
       - comandas
   /comandas/{id}/cancelar:

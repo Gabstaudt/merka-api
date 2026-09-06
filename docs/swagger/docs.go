@@ -523,6 +523,79 @@ const docTemplate = `{
                 }
             }
         },
+        "/comandas/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Exclusão física de verdade (o código físico deixa de existir e pode ser reaproveitado) — só permitida se a comanda NÃO estiver em uso E não tiver nenhum histórico (item, desconto, pagamento ou alerta). Requer a permissão excluir_comanda.",
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Excluir comanda física (Admin Super/Gestor)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID da comanda",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda está em uso — não pode ser excluída",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/comandas/{id}/cancelar": {
             "post": {
                 "security": [
@@ -3315,7 +3388,8 @@ const docTemplate = `{
                 "configurar_preco_peso",
                 "cancelar_nota_fiscal",
                 "ver_comandas",
-                "criar_comanda"
+                "criar_comanda",
+                "excluir_comanda"
             ],
             "x-enum-varnames": [
                 "PermissaoCriarUsuario",
@@ -3336,7 +3410,8 @@ const docTemplate = `{
                 "PermissaoConfigurarPrecoPeso",
                 "PermissaoCancelarNotaFiscal",
                 "PermissaoVerComandas",
-                "PermissaoCriarComanda"
+                "PermissaoCriarComanda",
+                "PermissaoExcluirComanda"
             ]
         },
         "github_com_merka_api_internal_domain.PermissionCatalogo": {

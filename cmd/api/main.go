@@ -163,10 +163,11 @@ func main() {
 	cancelarNotaFiscal := usecase.NewCancelarNotaFiscal(fiscalProvider, fiscalReceiptRepo, tenantRepo)
 	listarTodasComandas := usecase.NewListarTodasComandas(comandaRepo)
 	criarComanda := usecase.NewCriarComanda(comandaRepo)
+	excluirComanda := usecase.NewExcluirComanda(comandaRepo)
 
 	comandaHandler := handler.NewComandaHandler(
 		consultarComanda, listarItensComanda, abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
-		listarTodasComandas, criarComanda,
+		listarTodasComandas, criarComanda, excluirComanda,
 		auditWriter, hub, permissionRepo, rateLimitEscritaCritica,
 	)
 	comandaHandler.RegistrarRotas(protegidas)

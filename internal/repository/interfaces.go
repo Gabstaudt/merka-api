@@ -244,6 +244,26 @@ type PaymentRepository interface {
 type SyncAlertRepository interface {
 	RegistrarConflitoComandaFinalizada(ctx context.Context, tenantID, comandaID, origemUserID uuid.UUID, detalhes map[string]any) error
 
+	// RegistrarPendencia30s grava o alerta do tipo 'pendencia_30s' — a
+	// fila offline do PWA (Balança/Garçom, lib/offline-queue.ts no
+	// frontend) chama isso quando uma ação (peso/item) fica 30s sem
+	// confirmar com o servidor por falta de conexão. `criadoEm` vem do
+	// cliente (o instante em que a ação foi originalmente tentada, não
+	// agora) — assim o Gestor vê há quanto tempo está pendente de
+	// verdade, não só desde que a rede voltou. comandaID é opcional
+	// (pode não ter sido possível nem resolver a comanda offline).
+	RegistrarPendencia30s(ctx context.Context, tenantID uuid.UUID, comandaID *uuid.UUID, origemUserID uuid.UUID, detalhes map[string]any, criadoEm time.Time) (*domain.SyncAlert, error)
+
+	// Resolver marca um alerta como resolvido — chamado quando a ação
+	// enfileirada finalmente sincroniza com sucesso (a fila offline no
+	// cliente guarda o ID devolvido por RegistrarPendencia30s).
+	Resolver(ctx context.Context, tenantID, alertaID uuid.UUID) error
+
+	// ListarNaoResolvidos lista TODOS os alertas não resolvidos do tenant
+	// (qualquer tipo) — painel do Gestor, tanto na carga inicial da tela
+	// quanto pra reconciliar depois de reconectar o WebSocket.
+	ListarNaoResolvidos(ctx context.Context, tenantID uuid.UUID) ([]domain.SyncAlert, error)
+
 	// ListarPendenciasNaoResolvidas busca alertas do tipo 'pendencia_30s'
 	// ainda não resolvidos, criados antes de `criadoAntesDe` — usado pelo
 	// worker de background (internal/ws/pendencia_worker.go). Roda fora do

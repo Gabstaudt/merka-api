@@ -1381,7 +1381,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "description": "Restrito a Admin Super/Gestor (permissão \"gerenciar_mesas\").",
                 "consumes": [
                     "application/json"
                 ],
@@ -1465,7 +1465,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "description": "Restrito a Admin Super/Gestor (permissão \"gerenciar_mesas\").",
                 "produces": [
                     "application/json"
                 ],
@@ -1520,7 +1520,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restrito a Admin Super (permissão \"configurar_sistema\").",
+                "description": "Restrito a Admin Super/Gestor (permissão \"gerenciar_mesas\").",
                 "consumes": [
                     "application/json"
                 ],
@@ -1617,7 +1617,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Nunca deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas continuam referenciando ela normalmente.",
+                "description": "Restrito a Admin Super/Gestor (permissão \"gerenciar_mesas\"). Nunca deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas continuam referenciando ela normalmente.",
                 "tags": [
                     "mesas"
                 ],
@@ -1681,7 +1681,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Restrito a Admin Super (permissão \"configurar_sistema\"). Desfaz Desativar.",
+                "description": "Restrito a Admin Super/Gestor (permissão \"gerenciar_mesas\"). Desfaz Desativar.",
                 "tags": [
                     "mesas"
                 ],
@@ -2932,6 +2932,171 @@ const docTemplate = `{
                 }
             }
         },
+        "/sync-alertas": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Todos os alertas ainda não resolvidos do tenant — pendência de 30s, conflito de comanda já finalizada, ou contingência fiscal rejeitada. Requer a permissão ver_auditoria.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync-alertas"
+                ],
+                "summary": "Listar alertas de sincronização não resolvidos (Gestor)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_handler.syncAlertResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "usuário sem permissão para esta ação",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Chamado pela fila offline do PWA (Balança/Garçom) quando uma ação (peso/item) fica 30s sem confirmar com o servidor por falta de conexão. Dispara alerta em tempo real ao Gestor via WebSocket.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sync-alertas"
+                ],
+                "summary": "Reportar ação pendente de sincronização há 30s (fila offline)",
+                "parameters": [
+                    {
+                        "description": "Comanda (opcional) e detalhes da ação pendente",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.registrarPendenciaRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/internal_handler.syncAlertResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sync-alertas/{id}/resolver": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Chamado pela fila offline quando a ação que estava pendente finalmente sincroniza com sucesso.",
+                "tags": [
+                    "sync-alertas"
+                ],
+                "summary": "Marcar alerta de pendência como resolvido",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID do alerta",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "alerta não encontrado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/usuarios": {
             "get": {
                 "security": [
@@ -3389,7 +3554,8 @@ const docTemplate = `{
                 "cancelar_nota_fiscal",
                 "ver_comandas",
                 "criar_comanda",
-                "excluir_comanda"
+                "excluir_comanda",
+                "gerenciar_mesas"
             ],
             "x-enum-varnames": [
                 "PermissaoCriarUsuario",
@@ -3411,7 +3577,8 @@ const docTemplate = `{
                 "PermissaoCancelarNotaFiscal",
                 "PermissaoVerComandas",
                 "PermissaoCriarComanda",
-                "PermissaoExcluirComanda"
+                "PermissaoExcluirComanda",
+                "PermissaoGerenciarMesas"
             ]
         },
         "github_com_merka_api_internal_domain.PermissionCatalogo": {
@@ -3976,6 +4143,21 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_handler.registrarPendenciaRequest": {
+            "type": "object",
+            "properties": {
+                "comanda_id": {
+                    "type": "string"
+                },
+                "detalhes": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "pendente_desde": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_handler.registrarPesoRequest": {
             "type": "object",
             "properties": {
@@ -3996,6 +4178,30 @@ const docTemplate = `{
                 "configuracao": {
                     "type": "object",
                     "additionalProperties": {}
+                }
+            }
+        },
+        "internal_handler.syncAlertResponse": {
+            "type": "object",
+            "properties": {
+                "comanda_id": {
+                    "type": "string"
+                },
+                "criado_em": {
+                    "type": "string"
+                },
+                "detalhes": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "string"
+                },
+                "origem_user_id": {
+                    "type": "string"
+                },
+                "tipo": {
+                    "type": "string"
                 }
             }
         },

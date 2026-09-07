@@ -184,6 +184,12 @@ func main() {
 	orderItemHandler := handler.NewOrderItemHandler(estornarPeso, removerItem, auditWriter, hub, permissionRepo)
 	orderItemHandler.RegistrarRotas(protegidas)
 
+	registrarPendenciaSincronizacao := usecase.NewRegistrarPendenciaSincronizacao(syncAlertRepo)
+	resolverAlertaSincronizacao := usecase.NewResolverAlertaSincronizacao(syncAlertRepo)
+	listarAlertasSincronizacao := usecase.NewListarAlertasSincronizacao(syncAlertRepo)
+	syncAlertHandler := handler.NewSyncAlertHandler(registrarPendenciaSincronizacao, resolverAlertaSincronizacao, listarAlertasSincronizacao, hub, permissionRepo)
+	syncAlertHandler.RegistrarRotas(protegidas)
+
 	productHandler := handler.NewProductHandler(cadastrarProduto, configurarPrecoPeso, listarProdutos, auditWriter, permissionRepo)
 	productHandler.RegistrarRotas(protegidas)
 

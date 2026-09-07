@@ -34,6 +34,7 @@ const (
 	PermissaoVerComandas         Permissao = "ver_comandas"
 	PermissaoCriarComanda        Permissao = "criar_comanda"
 	PermissaoExcluirComanda      Permissao = "excluir_comanda"
+	PermissaoGerenciarMesas      Permissao = "gerenciar_mesas"
 )
 
 // PermissionCatalogo é uma linha do catálogo fixo de permissões (tabela

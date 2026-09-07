@@ -88,10 +88,22 @@ negócio é um arquivo em `usecase/` (ex: `abrir_comanda.go`,
    registro original.
 4. **Operação tolerante a queda de conexão**, mas o sistema é real-time por
    natureza (WebSocket é o modelo padrão, fila offline é rede de segurança
-   para o caso raro de queda de internet).
+   para o caso raro de queda de internet). **Implementado em 2026-09-07**:
+   `merka-web/lib/offline-queue.ts` (IndexedDB, Balança/Garçom) — enfileira
+   lançamentos de peso/item que falharem por rede, sincroniza sozinho em
+   background (5s) ou no evento `online`.
 5. **Alerta em 30 segundos**: qualquer ação pendente de confirmação pelo
    servidor que não seja confirmada em até 30s deve gerar alerta automático
-   visível ao Gestor.
+   visível ao Gestor. **Implementado em 2026-09-07**: a fila offline do
+   frontend reporta a pendência via `POST /sync-alertas` quando um item
+   completa 30s sem sincronizar; `PendenciaWorker`
+   (`internal/ws/pendencia_worker.go`) — já existia, era só a peça que
+   faltava — continua como rede de segurança. Broadcast imediato via
+   WebSocket (`internal/handler/sync_alert_handler.go`) pro painel do
+   Gestor (`merka-web/app/(gestor)/layout.tsx`, componente
+   `AlertasSincronizacao`), que também lista os não-resolvidos via
+   `GET /sync-alertas` na carga da tela. Resolve sozinho
+   (`PATCH /sync-alertas/:id/resolver`) quando o item sincroniza.
 6. **Conflito de sincronização** (lançamento chegando atrasado numa comanda
    já finalizada): rejeitar o lançamento, notificar o dispositivo de origem
    E o Gestor simultaneamente — nunca aceitar silenciosamente.
@@ -115,6 +127,13 @@ Desconto manual: **Gestor, Admin Super, Caixa**.
 Transferência de mesa: **qualquer perfil**.
 Cadastro de produto novo: **Admin Super, Gestor, Caixa** (não Balança).
 Ajuste de preço/kg e tara: **Admin Super, Gestor, Caixa, Balança**.
+Gestão de mesas (criar/renomear/desativar): **Admin Super, Gestor**
+(permissão `gerenciar_mesas`, separada de `configurar_sistema` desde
+2026-09-07 — config estrutural do tenant, ex: pricing_rules, continua
+exclusiva do Admin Super).
+Criar/excluir comanda física: **Admin Super, Gestor** (`criar_comanda`/
+`excluir_comanda` — excluir só funciona em comanda vazia, sem histórico).
+Ver todas as comandas: **Admin Super, Gestor, Caixa** (`ver_comandas`).
 
 ## Schema completo do banco (referência)
 

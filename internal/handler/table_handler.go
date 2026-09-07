@@ -53,16 +53,18 @@ func NewTableHandler(
 // que já passe pelos middlewares Auth + Tenant (ver cmd/api/main.go).
 // GET /mesas sem RequerPermissao: qualquer perfil autenticado pode
 // consultar quais mesas estão ocupadas (garçom, caixa, gestor). A gestão
-// de mesas (criar/editar/desativar/listar todas) usa "configurar_sistema"
-// — mesma permissão de configurações estruturais do tenant, exclusiva do
+// de mesas (criar/editar/desativar/listar todas) usa "gerenciar_mesas" —
+// permissão própria (não mais "configurar_sistema"), pra permitir que o
+// Gestor também gerencie mesas sem ganhar acesso às configurações
+// estruturais do tenant (pricing_rules), que continuam exclusivas do
 // Admin Super.
 func (h *TableHandler) RegistrarRotas(router fiber.Router) {
 	router.Get("/mesas", h.Listar)
-	router.Get("/mesas/todas", middleware.RequerPermissao(h.permRepo, domain.PermissaoConfigurarSistema), h.ListarTodas)
-	router.Post("/mesas", middleware.RequerPermissao(h.permRepo, domain.PermissaoConfigurarSistema), h.Criar)
-	router.Patch("/mesas/:id", middleware.RequerPermissao(h.permRepo, domain.PermissaoConfigurarSistema), h.Editar)
-	router.Patch("/mesas/:id/desativar", middleware.RequerPermissao(h.permRepo, domain.PermissaoConfigurarSistema), h.Desativar)
-	router.Patch("/mesas/:id/reativar", middleware.RequerPermissao(h.permRepo, domain.PermissaoConfigurarSistema), h.Reativar)
+	router.Get("/mesas/todas", middleware.RequerPermissao(h.permRepo, domain.PermissaoGerenciarMesas), h.ListarTodas)
+	router.Post("/mesas", middleware.RequerPermissao(h.permRepo, domain.PermissaoGerenciarMesas), h.Criar)
+	router.Patch("/mesas/:id", middleware.RequerPermissao(h.permRepo, domain.PermissaoGerenciarMesas), h.Editar)
+	router.Patch("/mesas/:id/desativar", middleware.RequerPermissao(h.permRepo, domain.PermissaoGerenciarMesas), h.Desativar)
+	router.Patch("/mesas/:id/reativar", middleware.RequerPermissao(h.permRepo, domain.PermissaoGerenciarMesas), h.Reativar)
 }
 
 // comandaResumoResponse é a projeção de domain.ComandaResumo pro JSON.
@@ -131,7 +133,7 @@ func novaMesaCompletaResponse(t domain.Table) mesaCompletaResponse {
 
 // ListarTodas godoc
 // @Summary      Listar todas as mesas, ativas e inativas (Configurações)
-// @Description  Restrito a Admin Super (permissão "configurar_sistema").
+// @Description  Restrito a Admin Super/Gestor (permissão "gerenciar_mesas").
 // @Tags         mesas
 // @Security     BearerAuth
 // @Produce      json
@@ -165,7 +167,7 @@ type mesaRequest struct {
 
 // Criar godoc
 // @Summary      Cadastrar mesa nova (Configurações)
-// @Description  Restrito a Admin Super (permissão "configurar_sistema").
+// @Description  Restrito a Admin Super/Gestor (permissão "gerenciar_mesas").
 // @Tags         mesas
 // @Security     BearerAuth
 // @Accept       json
@@ -213,7 +215,7 @@ func (h *TableHandler) Criar(c *fiber.Ctx) error {
 
 // Editar godoc
 // @Summary      Renomear mesa (Configurações)
-// @Description  Restrito a Admin Super (permissão "configurar_sistema").
+// @Description  Restrito a Admin Super/Gestor (permissão "gerenciar_mesas").
 // @Tags         mesas
 // @Security     BearerAuth
 // @Accept       json
@@ -270,7 +272,7 @@ func (h *TableHandler) Editar(c *fiber.Ctx) error {
 
 // Desativar godoc
 // @Summary      Desativar mesa (Configurações)
-// @Description  Restrito a Admin Super (permissão "configurar_sistema"). Nunca deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas continuam referenciando ela normalmente.
+// @Description  Restrito a Admin Super/Gestor (permissão "gerenciar_mesas"). Nunca deleta — mesa desativada some do fluxo do Garçom (US-16), mas comandas históricas continuam referenciando ela normalmente.
 // @Tags         mesas
 // @Security     BearerAuth
 // @Param        id  path  string  true  "ID da mesa"
@@ -313,7 +315,7 @@ func (h *TableHandler) Desativar(c *fiber.Ctx) error {
 
 // Reativar godoc
 // @Summary      Reativar mesa desativada (Configurações)
-// @Description  Restrito a Admin Super (permissão "configurar_sistema"). Desfaz Desativar.
+// @Description  Restrito a Admin Super/Gestor (permissão "gerenciar_mesas"). Desfaz Desativar.
 // @Tags         mesas
 // @Security     BearerAuth
 // @Param        id  path  string  true  "ID da mesa"

@@ -176,6 +176,13 @@ func (f *fakeAlertRepo) RegistrarContingenciaRejeitada(_ context.Context, tenant
 	f.alertas = append(f.alertas, alertaRejeitado{tenantID, detalhes})
 	return nil
 }
+func (f *fakeAlertRepo) RegistrarPendencia30s(context.Context, uuid.UUID, *uuid.UUID, uuid.UUID, map[string]any, time.Time) (*domain.SyncAlert, error) {
+	return nil, nil
+}
+func (f *fakeAlertRepo) Resolver(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (f *fakeAlertRepo) ListarNaoResolvidos(context.Context, uuid.UUID) ([]domain.SyncAlert, error) {
+	return nil, nil
+}
 
 type fakeProvider struct {
 	protocolo string

@@ -107,3 +107,10 @@ func (f *fakeSyncAlertRepo) ListarPendenciasNaoResolvidas(_ context.Context, _ t
 func (f *fakeSyncAlertRepo) RegistrarContingenciaRejeitada(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }
+func (f *fakeSyncAlertRepo) RegistrarPendencia30s(context.Context, uuid.UUID, *uuid.UUID, uuid.UUID, map[string]any, time.Time) (*domain.SyncAlert, error) {
+	return nil, nil
+}
+func (f *fakeSyncAlertRepo) Resolver(context.Context, uuid.UUID, uuid.UUID) error { return nil }
+func (f *fakeSyncAlertRepo) ListarNaoResolvidos(context.Context, uuid.UUID) ([]domain.SyncAlert, error) {
+	return nil, nil
+}

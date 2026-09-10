@@ -24,12 +24,29 @@ definitions:
     properties:
       abertaEm:
         type: string
+      atendimentoAtualID:
+        description: |-
+          AtendimentoAtualID aponta pro ciclo de uso corrente (ver
+          domain.Atendimento) — não nulo enquanto Status == StatusEmUso (e
+          também durante StatusPaga, até o Porteiro liberar de volta pro
+          estoque). É o que isola os itens/descontos deste atendimento dos
+          de atendimentos anteriores da mesma comanda física reutilizada.
+        type: string
       codigoFisico:
         type: string
       fechadaEm:
         type: string
       id:
         type: string
+      numeroAtendimentoAtual:
+        description: |-
+          NumeroAtendimentoAtual é o "número do pedido" (sequencial,
+          atendimentos.numero) do ciclo de uso corrente — não é uma coluna
+          de comandas, é preenchido via JOIN só nas consultas que precisam
+          mostrar isso ao cliente (cupom impresso). Nulo quando
+          AtendimentoAtualID é nulo.
+        format: int64
+        type: integer
       status:
         $ref: '#/definitions/github_com_merka_api_internal_domain.StatusComanda'
       tableID:
@@ -42,6 +59,10 @@ definitions:
       aplicadoEm:
         type: string
       aplicadoPor:
+        type: string
+      atendimentoID:
+        description: ciclo de uso da comanda em que este desconto foi aplicado — ver
+          domain.Atendimento
         type: string
       comandaID:
         type: string
@@ -132,6 +153,9 @@ definitions:
     type: object
   github_com_merka_api_internal_domain.OrderItem:
     properties:
+      atendimentoID:
+        description: ciclo de uso da comanda em que este item foi lançado — ver domain.Atendimento
+        type: string
       comandaID:
         type: string
       id:
@@ -428,10 +452,14 @@ definitions:
         type: string
       mesa:
         type: string
+      numero_atendimento_atual:
+        type: integer
       quantidade_itens:
         type: integer
       status:
         type: string
+      total_atendimentos:
+        type: integer
       valor_total:
         type: number
     type: object
@@ -824,8 +852,8 @@ paths:
     get:
       description: Só leitura, sem auditoria (não muda estado nenhum) — usado pelo
         Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido,
-        se a próxima chamada é POST /abrir ou POST /liberar. O porteiro só escaneia;
-        quem escolhe a ação é o sistema.
+        se a próxima chamada é POST /abrir ou POST /liberar, e também por Balança/Garçom
+        pra resolver o código antes de abrir/lançar. Qualquer perfil autenticado.
       parameters:
       - description: Código físico da comanda (código de barras/QR)
         in: path
@@ -866,10 +894,11 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Porteiro escaneia/seleciona a comanda física e o sistema a marca
-        como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não
-        estiver com status "disponivel". Requer autenticação (Authorization: Bearer
-        <token>).'
+      description: Marca a comanda como "em_uso", associando-a opcionalmente a uma
+        mesa — chamado pelo Porteiro (entrega normal) ou diretamente por Balança/Garçom
+        quando encontram uma comanda "disponivel" (sem depender do Porteiro ter escaneado
+        antes). Falha se a comanda não estiver com status "disponivel". Qualquer perfil
+        autenticado.
       parameters:
       - description: Código físico da comanda (código de barras/QR)
         in: path
@@ -962,6 +991,55 @@ paths:
       security:
       - BearerAuth: []
       summary: Receber comanda na saída e validar zeramento (US-08)
+      tags:
+      - comandas
+  /comandas/{codigo}/reabrir:
+    post:
+      description: Diferente de /abrir (US-07, sempre a partir de "disponivel", porta
+        de entrada do Porteiro) — reabre uma comanda "paga" direto de Balança/Garçom,
+        sem passar pela Portaria, porque o cartão físico nunca saiu da mesa. Inicia
+        um atendimento novo (a conta já paga fica intacta, separada); mantém a mesma
+        mesa.
+      parameters:
+      - description: Código físico da comanda
+        in: path
+        name: codigo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_merka_api_internal_domain.Comanda'
+        "401":
+          description: token ausente, inválido ou expirado
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: comanda não encontrada
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: comanda não está paga — não há o que reabrir
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: erro interno
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reabrir comanda já paga (cliente ainda na mesa, quer pedir mais)
       tags:
       - comandas
   /comandas/{id}:

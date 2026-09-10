@@ -19,6 +19,7 @@ type ComandaHandler struct {
 	consultarComanda   *usecase.ConsultarComanda
 	listarItensComanda *usecase.ListarItensComanda
 	abrirComanda       *usecase.AbrirComanda
+	reabrirComanda     *usecase.ReabrirComanda
 	registrarPeso      *usecase.RegistrarPeso
 	lancarItem         *usecase.LancarItem
 	liberarComanda     *usecase.LiberarComanda
@@ -38,6 +39,7 @@ func NewComandaHandler(
 	consultarComanda *usecase.ConsultarComanda,
 	listarItensComanda *usecase.ListarItensComanda,
 	abrirComanda *usecase.AbrirComanda,
+	reabrirComanda *usecase.ReabrirComanda,
 	registrarPeso *usecase.RegistrarPeso,
 	lancarItem *usecase.LancarItem,
 	liberarComanda *usecase.LiberarComanda,
@@ -56,6 +58,7 @@ func NewComandaHandler(
 		consultarComanda:   consultarComanda,
 		listarItensComanda: listarItensComanda,
 		abrirComanda:       abrirComanda,
+		reabrirComanda:     reabrirComanda,
 		registrarPeso:      registrarPeso,
 		lancarItem:         lancarItem,
 		liberarComanda:     liberarComanda,
@@ -78,15 +81,29 @@ func NewComandaHandler(
 // checagem de role hardcoded (seção 16 do documento de planejamento).
 // Exceção deliberada: PATCH /comandas/:id/mesa (transferir mesa, US-16) não
 // leva RequerPermissao — é permitida a qualquer perfil autenticado, ver
-// comentário em usecase/transferir_mesa.go.
+// comentário em usecase/transferir_mesa.go. GET /comandas/:codigo e
+// POST /comandas/:codigo/abrir seguem o mesmo raciocínio desde
+// 2026-09-09 (decisão explícita do usuário): o Porteiro continua sendo
+// quem controla a SAÍDA (só ele libera — permissão mantida em
+// /liberar), mas não é mais porta obrigatória pra USAR uma comanda —
+// Balança/Garçom precisam poder consultar e abrir uma comanda
+// 'disponivel' diretamente, sem depender do Porteiro ter escaneado ela
+// primeiro (esse fluxo de duas paradas gerava fricção sem necessidade
+// real: nada de errado acontece em deixar Balança/Garçom abrirem).
 func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 	router.Post("/comandas", middleware.RequerPermissao(h.permRepo, domain.PermissaoCriarComanda), h.Criar)
 	router.Get("/comandas/todas", middleware.RequerPermissao(h.permRepo, domain.PermissaoVerComandas), h.ListarTodas)
 	router.Delete("/comandas/:id", middleware.RequerPermissao(h.permRepo, domain.PermissaoExcluirComanda), h.Excluir)
-	router.Get("/comandas/:codigo", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.ConsultarPorCodigo)
+	router.Get("/comandas/:codigo", h.ConsultarPorCodigo)
 	router.Get("/comandas/:id/itens", h.ListarItens)
-	router.Post("/comandas/:codigo/abrir", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Abrir)
+	router.Post("/comandas/:codigo/abrir", h.Abrir)
 	router.Post("/comandas/:codigo/liberar", middleware.RequerPermissao(h.permRepo, domain.PermissaoEntregarComanda), h.Liberar)
+	// POST /reabrir não leva RequerPermissao de propósito — cliente já
+	// pagou mas continua na mesa e quer pedir mais, sem passar pela
+	// Portaria (o cartão físico nunca saiu de perto dele); Balança e
+	// Garçom precisam poder fazer isso igualmente, não só um perfil
+	// específico. Mesmo raciocínio de TransferirMesa (US-16) logo abaixo.
+	router.Post("/comandas/:codigo/reabrir", h.Reabrir)
 	router.Post("/comandas/:id/pesos", middleware.RequerPermissao(h.permRepo, domain.PermissaoRegistrarPeso), h.RegistrarPeso)
 	router.Post("/comandas/:id/itens", middleware.RequerPermissao(h.permRepo, domain.PermissaoLancarItem), h.LancarItem)
 	router.Post("/comandas/:id/cancelar", h.rateLimitEscrita, middleware.RequerPermissao(h.permRepo, domain.PermissaoCancelarComanda), h.Cancelar)
@@ -96,7 +113,7 @@ func (h *ComandaHandler) RegistrarRotas(router fiber.Router) {
 
 // ConsultarPorCodigo godoc
 // @Summary      Consultar status de uma comanda pelo código físico
-// @Description  Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar. O porteiro só escaneia; quem escolhe a ação é o sistema.
+// @Description  Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar, e também por Balança/Garçom pra resolver o código antes de abrir/lançar. Qualquer perfil autenticado.
 // @Tags         comandas
 // @Security     BearerAuth
 // @Produce      json
@@ -270,13 +287,15 @@ func (h *ComandaHandler) Excluir(c *fiber.Ctx) error {
 
 // comandaVisaoGeralResponse é a projeção de domain.ComandaVisaoGeral pro JSON.
 type comandaVisaoGeralResponse struct {
-	ID              string  `json:"id"`
-	CodigoFisico    string  `json:"codigo_fisico"`
-	Status          string  `json:"status"`
-	Mesa            *string `json:"mesa"`
-	AbertaEm        *string `json:"aberta_em"`
-	QuantidadeItens int     `json:"quantidade_itens"`
-	ValorTotal      float64 `json:"valor_total"`
+	ID                     string  `json:"id"`
+	CodigoFisico           string  `json:"codigo_fisico"`
+	Status                 string  `json:"status"`
+	Mesa                   *string `json:"mesa"`
+	AbertaEm               *string `json:"aberta_em"`
+	QuantidadeItens        int     `json:"quantidade_itens"`
+	ValorTotal             float64 `json:"valor_total"`
+	NumeroAtendimentoAtual *int64  `json:"numero_atendimento_atual"`
+	TotalAtendimentos      int     `json:"total_atendimentos"`
 }
 
 // ListarTodas godoc
@@ -309,13 +328,15 @@ func (h *ComandaHandler) ListarTodas(c *fiber.Ctx) error {
 			abertaEm = &formatado
 		}
 		resposta = append(resposta, comandaVisaoGeralResponse{
-			ID:              cm.ID.String(),
-			CodigoFisico:    cm.CodigoFisico,
-			Status:          string(cm.Status),
-			Mesa:            cm.MesaIdentificador,
-			AbertaEm:        abertaEm,
-			QuantidadeItens: cm.QuantidadeItens,
-			ValorTotal:      cm.ValorTotal,
+			ID:                     cm.ID.String(),
+			CodigoFisico:           cm.CodigoFisico,
+			Status:                 string(cm.Status),
+			Mesa:                   cm.MesaIdentificador,
+			AbertaEm:               abertaEm,
+			QuantidadeItens:        cm.QuantidadeItens,
+			ValorTotal:             cm.ValorTotal,
+			NumeroAtendimentoAtual: cm.NumeroAtendimentoAtual,
+			TotalAtendimentos:      cm.TotalAtendimentos,
 		})
 	}
 
@@ -329,7 +350,7 @@ type abrirComandaRequest struct {
 
 // Abrir godoc
 // @Summary      Entregar comanda zerada ao cliente (US-07)
-// @Description  Porteiro escaneia/seleciona a comanda física e o sistema a marca como "em_uso", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status "disponivel". Requer autenticação (Authorization: Bearer <token>).
+// @Description  Marca a comanda como "em_uso", associando-a opcionalmente a uma mesa — chamado pelo Porteiro (entrega normal) ou diretamente por Balança/Garçom quando encontram uma comanda "disponivel" (sem depender do Porteiro ter escaneado antes). Falha se a comanda não estiver com status "disponivel". Qualquer perfil autenticado.
 // @Tags         comandas
 // @Security     BearerAuth
 // @Accept       json
@@ -383,6 +404,54 @@ func (h *ComandaHandler) Abrir(c *fiber.Ctx) error {
 	}
 
 	h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comanda.ID, "comanda_aberta"))
+
+	return c.JSON(comanda)
+}
+
+// Reabrir godoc
+// @Summary      Reabrir comanda já paga (cliente ainda na mesa, quer pedir mais)
+// @Description  Diferente de /abrir (US-07, sempre a partir de "disponivel", porta de entrada do Porteiro) — reabre uma comanda "paga" direto de Balança/Garçom, sem passar pela Portaria, porque o cartão físico nunca saiu da mesa. Inicia um atendimento novo (a conta já paga fica intacta, separada); mantém a mesma mesa.
+// @Tags         comandas
+// @Security     BearerAuth
+// @Produce      json
+// @Param        codigo  path      string  true  "Código físico da comanda"
+// @Success      200     {object}  domain.Comanda
+// @Failure      401     {object}  map[string]string  "token ausente, inválido ou expirado"
+// @Failure      404     {object}  map[string]string  "comanda não encontrada"
+// @Failure      409     {object}  map[string]string  "comanda não está paga — não há o que reabrir"
+// @Failure      500     {object}  map[string]string  "erro interno"
+// @Router       /comandas/{codigo}/reabrir [post]
+func (h *ComandaHandler) Reabrir(c *fiber.Ctx) error {
+	codigo := c.Params("codigo")
+
+	tenantID, userID, ok := identidadeRequisicao(c)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"erro": "tenant/usuário não identificado — autentique-se novamente"})
+	}
+
+	dadosAuditoria := map[string]any{"codigo_fisico": codigo}
+
+	comanda, err := audit.Executar(c.UserContext(), h.auditWriter, "reabrir_comanda", tenantID, userID, dadosAuditoria,
+		func() (*domain.Comanda, *uuid.UUID, error) {
+			comanda, err := h.reabrirComanda.Executar(c.UserContext(), tenantID, codigo)
+			if comanda == nil {
+				return nil, nil, err
+			}
+			return comanda, &comanda.ID, err
+		},
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, postgres.ErrComandaNaoEncontrada):
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"erro": "comanda não encontrada"})
+		case errors.Is(err, usecase.ErrComandaNaoPodeSerReaberta):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"erro": err.Error()})
+		default:
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"erro": "erro interno"})
+		}
+	}
+
+	h.hub.Broadcast(tenantID, ws.NovoEventoComandaAtualizada(comanda.ID, "comanda_reaberta"))
 
 	return c.JSON(comanda)
 }

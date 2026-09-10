@@ -29,6 +29,20 @@ type Comanda struct {
 	TableID      *uuid.UUID
 	AbertaEm     *time.Time
 	FechadaEm    *time.Time
+
+	// AtendimentoAtualID aponta pro ciclo de uso corrente (ver
+	// domain.Atendimento) — não nulo enquanto Status == StatusEmUso (e
+	// também durante StatusPaga, até o Porteiro liberar de volta pro
+	// estoque). É o que isola os itens/descontos deste atendimento dos
+	// de atendimentos anteriores da mesma comanda física reutilizada.
+	AtendimentoAtualID *uuid.UUID
+
+	// NumeroAtendimentoAtual é o "número do pedido" (sequencial,
+	// atendimentos.numero) do ciclo de uso corrente — não é uma coluna
+	// de comandas, é preenchido via JOIN só nas consultas que precisam
+	// mostrar isso ao cliente (cupom impresso). Nulo quando
+	// AtendimentoAtualID é nulo.
+	NumeroAtendimentoAtual *int64
 }
 
 // PodeSerExcluida valida a regra de negócio da exclusão (Admin
@@ -46,13 +60,15 @@ func (c *Comanda) PodeSerExcluida() bool {
 // (ver_comandas): além do status, mostra se há algo dentro dela (itens
 // ativos e valor consolidado) sem precisar abrir cada uma pra conferir.
 type ComandaVisaoGeral struct {
-	ID                uuid.UUID
-	CodigoFisico      string
-	Status            StatusComanda
-	MesaIdentificador *string
-	AbertaEm          *time.Time
-	QuantidadeItens   int
-	ValorTotal        float64
+	ID                     uuid.UUID
+	CodigoFisico           string
+	Status                 StatusComanda
+	MesaIdentificador      *string
+	AbertaEm               *time.Time
+	QuantidadeItens        int
+	ValorTotal             float64
+	NumeroAtendimentoAtual *int64 // pedido em andamento (nulo se a comanda não está em uso agora)
+	TotalAtendimentos      int    // quantas vezes essa comanda física já foi usada (ver domain.Atendimento)
 }
 
 // PodeSerEntregue valida a regra de negócio da US-07:
@@ -64,6 +80,16 @@ func (c *Comanda) PodeSerEntregue() bool {
 // PodeSerLiberada valida a regra da US-08/US-18:
 // só libera a comanda na saída se ela já estiver paga (sem saldo devedor).
 func (c *Comanda) PodeSerLiberada() bool {
+	return c.Status == StatusPaga
+}
+
+// PodeSerReaberta valida a regra de negócio de ReabrirComanda: o cliente
+// já fechou a conta (status paga) mas ainda está na mesa — não passou
+// pelo Porteiro pra sair — e quer pedir mais alguma coisa. Diferente de
+// AbrirComanda (US-07, sempre a partir de 'disponivel', porta de
+// entrada controlada pelo Porteiro), reabrir uma comanda paga não exige
+// nenhuma passagem pela Portaria — o cartão físico nunca saiu da mesa.
+func (c *Comanda) PodeSerReaberta() bool {
 	return c.Status == StatusPaga
 }
 

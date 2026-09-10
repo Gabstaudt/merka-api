@@ -17,11 +17,12 @@ const (
 // Discount é um desconto manual aplicado a uma comanda (US-17) — Gestor,
 // Admin Super ou Caixa, sempre com motivo obrigatório.
 type Discount struct {
-	ID        uuid.UUID
-	TenantID  uuid.UUID
-	ComandaID uuid.UUID
-	Tipo      TipoDesconto
-	Valor     float64
+	ID            uuid.UUID
+	TenantID      uuid.UUID
+	ComandaID     uuid.UUID
+	AtendimentoID *uuid.UUID // ciclo de uso da comanda em que este desconto foi aplicado — ver domain.Atendimento
+	Tipo          TipoDesconto
+	Valor         float64
 	// ValorAplicado é sempre em reais, calculado no momento da aplicação
 	// (para desconto percentual, "congela" o valor resultante — não
 	// recalcula se a comanda mudar depois). É este campo, não Valor, que

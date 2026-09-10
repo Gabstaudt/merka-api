@@ -52,7 +52,7 @@ func (uc *LancarItem) Executar(ctx context.Context, tenantID, comandaID, product
 		if alertErr := uc.syncAlertRepo.RegistrarConflitoComandaFinalizada(ctx, tenantID, comandaID, userID, detalhes); alertErr != nil {
 			return nil, alertErr
 		}
-		return nil, ErrConflitoSincronizacao
+		return nil, motivoConflito(comanda.Status)
 	}
 
 	product, err := uc.productRepo.BuscarPorID(ctx, tenantID, productID)
@@ -60,7 +60,7 @@ func (uc *LancarItem) Executar(ctx context.Context, tenantID, comandaID, product
 		return nil, err
 	}
 
-	item := domain.NovoOrderItemUnitario(tenantID, comandaID, product, quantidade, userID)
+	item := domain.NovoOrderItemUnitario(tenantID, comandaID, comanda.AtendimentoAtualID, product, quantidade, userID)
 	if err := uc.orderItemRepo.Criar(ctx, item); err != nil {
 		return nil, err
 	}

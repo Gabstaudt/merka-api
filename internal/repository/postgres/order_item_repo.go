@@ -33,15 +33,15 @@ func NewOrderItemRepository(pool *pgxpool.Pool) repository.OrderItemRepository {
 
 func (r *orderItemRepository) Criar(ctx context.Context, item *domain.OrderItem) error {
 	const query = `
-		INSERT INTO order_items (tenant_id, comanda_id, product_id, quantidade, peso_kg, valor, status, lancado_por)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO order_items (tenant_id, comanda_id, atendimento_id, product_id, quantidade, peso_kg, valor, status, lancado_por)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, lancado_em
 	`
 
 	db := connFromCtx(ctx, r.pool)
 
 	err := db.QueryRow(ctx, query,
-		item.TenantID, item.ComandaID, item.ProductID, item.Quantidade, item.PesoKg,
+		item.TenantID, item.ComandaID, item.AtendimentoID, item.ProductID, item.Quantidade, item.PesoKg,
 		item.Valor, item.Status, item.LancadoPor,
 	).Scan(&item.ID, &item.LancadoEm)
 	if err != nil {
@@ -51,21 +51,27 @@ func (r *orderItemRepository) Criar(ctx context.Context, item *domain.OrderItem)
 	return nil
 }
 
-// SomarTotalAtivo soma só os itens ativos lançados NO CICLO ATUAL de uso
-// da comanda (lancado_em >= comandas.aberta_em) — a comanda física é
+// SomarTotalAtivo soma só os itens ativos do ATENDIMENTO ATUAL da comanda
+// (oi.atendimento_id = c.atendimento_atual_id) — a comanda física é
 // reutilizada indefinidamente (disponivel -> em_uso -> paga -> disponivel,
-// seção 17 do planejamento) e nada marca os order_items de um ciclo
+// seção 17 do planejamento) e nada marca os order_items de um atendimento
 // anterior como "não conta mais" quando a comanda volta a ficar em_uso.
 // Sem esse filtro, um item já cobrado (e pago) do cliente de ontem
 // continuaria contando no total do cliente de hoje só por calhar de pegar
 // a mesma comanda física — mesmo bug que já existia em discounts, ver
-// discount_repo.go SomarAplicadoPorComandas.
+// discount_repo.go SomarAplicadoPorComandas. Substituiu uma comparação por
+// timestamp (`lancado_em >= aberta_em`) que causou um bug real em
+// produção: uma comanda com aberta_em nulo tinha TODOS os itens
+// escondidos, porque em SQL `qualquer_coisa >= NULL` é NULL, não false
+// (ver migrations/0031_atendimentos.sql e CLAUDE.md). Comparar por
+// atendimento_id (igualdade de dois IDs sempre atribuídos juntos, nunca
+// um sem o outro) não tem essa ambiguidade.
 func (r *orderItemRepository) SomarTotalAtivo(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error) {
 	const query = `
 		SELECT COALESCE(SUM(oi.valor), 0)
 		FROM order_items oi
 		JOIN comandas c ON c.id = oi.comanda_id
-		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.lancado_em >= c.aberta_em
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.atendimento_id = c.atendimento_atual_id
 	`
 
 	db := connFromCtx(ctx, r.pool)
@@ -80,7 +86,7 @@ func (r *orderItemRepository) SomarTotalAtivo(ctx context.Context, tenantID uuid
 
 func (r *orderItemRepository) BuscarPorID(ctx context.Context, tenantID, itemID uuid.UUID) (*domain.OrderItem, error) {
 	const query = `
-		SELECT id, tenant_id, comanda_id, product_id, quantidade, peso_kg, valor, status,
+		SELECT id, tenant_id, comanda_id, atendimento_id, product_id, quantidade, peso_kg, valor, status,
 		       lancado_por, lancado_em, removido_por, removido_em, motivo_remocao
 		FROM order_items
 		WHERE tenant_id = $1 AND id = $2
@@ -90,7 +96,7 @@ func (r *orderItemRepository) BuscarPorID(ctx context.Context, tenantID, itemID 
 
 	var item domain.OrderItem
 	err := db.QueryRow(ctx, query, tenantID, itemID).Scan(
-		&item.ID, &item.TenantID, &item.ComandaID, &item.ProductID, &item.Quantidade, &item.PesoKg,
+		&item.ID, &item.TenantID, &item.ComandaID, &item.AtendimentoID, &item.ProductID, &item.Quantidade, &item.PesoKg,
 		&item.Valor, &item.Status, &item.LancadoPor, &item.LancadoEm,
 		&item.RemovidoPor, &item.RemovidoEm, &item.MotivoRemocao,
 	)
@@ -130,11 +136,11 @@ func (r *orderItemRepository) MarcarStatus(ctx context.Context, itemID uuid.UUID
 // cliente completamente diferente.
 func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) ([]domain.OrderItem, error) {
 	const query = `
-		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
+		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.atendimento_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
 		       oi.lancado_por, oi.lancado_em, oi.removido_por, oi.removido_em, oi.motivo_remocao
 		FROM order_items oi
 		JOIN comandas c ON c.id = oi.comanda_id
-		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.lancado_em >= c.aberta_em
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = ANY($2::uuid[]) AND oi.status = 'ativo' AND oi.atendimento_id = c.atendimento_atual_id
 		ORDER BY oi.lancado_em
 	`
 
@@ -150,7 +156,7 @@ func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenan
 	for rows.Next() {
 		var item domain.OrderItem
 		if err := rows.Scan(
-			&item.ID, &item.TenantID, &item.ComandaID, &item.ProductID, &item.Quantidade, &item.PesoKg,
+			&item.ID, &item.TenantID, &item.ComandaID, &item.AtendimentoID, &item.ProductID, &item.Quantidade, &item.PesoKg,
 			&item.Valor, &item.Status, &item.LancadoPor, &item.LancadoEm,
 			&item.RemovidoPor, &item.RemovidoEm, &item.MotivoRemocao,
 		); err != nil {
@@ -172,11 +178,11 @@ func (r *orderItemRepository) ListarAtivosPorComandas(ctx context.Context, tenan
 // mesma comanda física antes.
 func (r *orderItemRepository) ListarPorComanda(ctx context.Context, tenantID, comandaID uuid.UUID) ([]domain.OrderItem, error) {
 	const query = `
-		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
+		SELECT oi.id, oi.tenant_id, oi.comanda_id, oi.atendimento_id, oi.product_id, oi.quantidade, oi.peso_kg, oi.valor, oi.status,
 		       oi.lancado_por, oi.lancado_em, oi.removido_por, oi.removido_em, oi.motivo_remocao
 		FROM order_items oi
 		JOIN comandas c ON c.id = oi.comanda_id
-		WHERE oi.tenant_id = $1 AND oi.comanda_id = $2 AND oi.lancado_em >= c.aberta_em
+		WHERE oi.tenant_id = $1 AND oi.comanda_id = $2 AND oi.atendimento_id = c.atendimento_atual_id
 		ORDER BY oi.lancado_em
 	`
 
@@ -192,7 +198,7 @@ func (r *orderItemRepository) ListarPorComanda(ctx context.Context, tenantID, co
 	for rows.Next() {
 		var item domain.OrderItem
 		if err := rows.Scan(
-			&item.ID, &item.TenantID, &item.ComandaID, &item.ProductID, &item.Quantidade, &item.PesoKg,
+			&item.ID, &item.TenantID, &item.ComandaID, &item.AtendimentoID, &item.ProductID, &item.Quantidade, &item.PesoKg,
 			&item.Valor, &item.Status, &item.LancadoPor, &item.LancadoEm,
 			&item.RemovidoPor, &item.RemovidoEm, &item.MotivoRemocao,
 		); err != nil {

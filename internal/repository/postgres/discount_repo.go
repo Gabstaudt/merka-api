@@ -22,15 +22,15 @@ func NewDiscountRepository(pool *pgxpool.Pool) repository.DiscountRepository {
 
 func (r *discountRepository) Criar(ctx context.Context, discount *domain.Discount) error {
 	const query = `
-		INSERT INTO discounts (tenant_id, comanda_id, tipo, valor, valor_aplicado, motivo, aplicado_por)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO discounts (tenant_id, comanda_id, atendimento_id, tipo, valor, valor_aplicado, motivo, aplicado_por)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, aplicado_em
 	`
 
 	db := connFromCtx(ctx, r.pool)
 
 	err := db.QueryRow(ctx, query,
-		discount.TenantID, discount.ComandaID, discount.Tipo, discount.Valor, discount.ValorAplicado,
+		discount.TenantID, discount.ComandaID, discount.AtendimentoID, discount.Tipo, discount.Valor, discount.ValorAplicado,
 		discount.Motivo, discount.AplicadoPor,
 	).Scan(&discount.ID, &discount.AplicadoEm)
 	if err != nil {
@@ -41,22 +41,24 @@ func (r *discountRepository) Criar(ctx context.Context, discount *domain.Discoun
 }
 
 // SomarAplicadoPorComandas soma valor_aplicado dos descontos gravados nas
-// comandas informadas, mas só os aplicados NO CICLO ATUAL de uso da
-// comanda (aplicado_em >= comandas.aberta_em). Descontos nunca são
-// editados/removidos (seção 17 do planejamento) — mas a comanda física é
-// reutilizada indefinidamente (disponivel -> em_uso -> paga -> disponivel,
-// seção 17), então sem esse filtro o desconto do cliente de ontem ficaria
-// abatendo o total do cliente de hoje pra sempre, só porque calhou de
-// pegar a mesma comanda física. AbrirComanda atualiza aberta_em a cada
-// novo ciclo (US-07), o que naturalmente "zera" os descontos de ciclos
-// anteriores sem precisar apagar nada. Usado por FecharPagamento pra
-// abater do total antes de conferir os pagamentos parciais.
+// comandas informadas, mas só os aplicados no ATENDIMENTO ATUAL da
+// comanda (d.atendimento_id = c.atendimento_atual_id). Descontos nunca
+// são editados/removidos (seção 17 do planejamento) — mas a comanda
+// física é reutilizada indefinidamente (disponivel -> em_uso -> paga ->
+// disponivel, seção 17), então sem esse filtro o desconto do cliente de
+// ontem ficaria abatendo o total do cliente de hoje pra sempre, só
+// porque calhou de pegar a mesma comanda física. AbrirComanda cria um
+// atendimento novo a cada ciclo (US-07), o que naturalmente "zera" os
+// descontos de ciclos anteriores sem precisar apagar nada. Usado por
+// FecharPagamento pra abater do total antes de conferir os pagamentos
+// parciais. Ver order_item_repo.go/SomarTotalAtivo pro porquê da
+// mudança de timestamp pra atendimento_id (bug real com aberta_em nulo).
 func (r *discountRepository) SomarAplicadoPorComandas(ctx context.Context, tenantID uuid.UUID, comandaIDs []uuid.UUID) (float64, error) {
 	const query = `
 		SELECT COALESCE(SUM(d.valor_aplicado), 0)
 		FROM discounts d
 		JOIN comandas c ON c.id = d.comanda_id
-		WHERE d.tenant_id = $1 AND d.comanda_id = ANY($2::uuid[]) AND d.aplicado_em >= c.aberta_em
+		WHERE d.tenant_id = $1 AND d.comanda_id = ANY($2::uuid[]) AND d.atendimento_id = c.atendimento_atual_id
 	`
 
 	db := connFromCtx(ctx, r.pool)

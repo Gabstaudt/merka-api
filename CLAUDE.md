@@ -74,6 +74,150 @@ usecase/  ──▶  repository/  ──▶  domain/
 negócio é um arquivo em `usecase/` (ex: `abrir_comanda.go`,
 `registrar_peso.go`, `aplicar_desconto.go` — não um `service.go` genérico).
 
+## Ciclo de uso da comanda: entidade `atendimentos` (2026-09-07)
+
+Toda comanda física é reutilizada indefinidamente (`disponivel -> em_uso
+-> paga -> disponivel`, seção 17) — os itens/descontos de um ciclo de uso
+não podem contar no ciclo seguinte. Isso já existia como regra, mas até
+2026-09-07 era implementado comparando timestamp (`oi.lancado_em >=
+c.aberta_em`). Essa comparação causou um bug real: em SQL,
+`qualquer_coisa >= NULL` é `NULL` (nem true nem false), então uma comanda
+com `aberta_em` nulo (aconteceu numa comanda de teste editada por SQL
+direto, fora do fluxo normal de `AbrirComanda`) tinha **todos** os itens
+escondidos do Garçom e do Caixa, não zero — sintoma relatado pelo
+usuário: lançou peso + itens numa comanda, nada aparecia em nenhuma
+tela, mas os dados estavam certos no banco o tempo todo.
+
+Corrigido pela raiz com uma entidade nova: **`atendimentos`**
+(`migrations/0031_atendimentos.sql`, `domain.Atendimento`) — um ciclo de
+uso é agora uma linha própria, com `numero` sequencial (visível ao
+cliente como "Pedido #N", ver `NumeroAtendimentoAtual` em
+`domain.Comanda`), criada por `AbrirComanda` (US-07) e encerrada por
+`LiberarComanda`/`CancelarComanda`. `comandas.atendimento_atual_id`
+aponta pro atendimento corrente (nulo quando não há um em andamento);
+`order_items.atendimento_id` e `discounts.atendimento_id` marcam a qual
+ciclo cada lançamento pertence. As queries que antes comparavam
+timestamp (`SomarTotalAtivo`, `ListarPorComanda`,
+`ListarAtivosPorComandas`, `SomarAplicadoPorComandas`) agora comparam
+`atendimento_id = atendimento_atual_id` — uma igualdade entre dois IDs
+sempre atribuídos juntos, sem a ambiguidade do `NULL` de timestamp.
+Testado ao vivo: mesma comanda física usada, paga, liberada e reaberta
+3 vezes seguidas — cada ciclo começa genuinamente zerado, mesmo com
+itens reais de ciclos anteriores intactos no banco (nunca apagados,
+só não contam mais pro ciclo atual).
+
+**Visibilidade no Gestor/Caixa (2026-09-09)**: usuário perguntou onde
+isso aparecia — resposta honesta foi "em lugar nenhum ainda" (só existia
+na API). Adicionado: `GET /comandas/todas` agora devolve
+`numero_atendimento_atual` (pedido em andamento, nulo se a comanda não
+está em uso) e `total_atendimentos` (quantas vezes essa comanda física
+já foi usada, contando TODOS os ciclos, mesmo os já fechados). A
+contagem vem de uma subquery pré-agregada
+(`SELECT comanda_id, COUNT(*) FROM atendimentos GROUP BY comanda_id`)
+joinada depois, não de um `LEFT JOIN atendimentos` direto na mesma query
+que já tem `LEFT JOIN order_items` — dois LEFT JOINs de tabelas-detalhe
+direto na mesma linha de comanda multiplicariam em cruz (produto
+cartesiano) e inflariam a contagem/soma de itens. Exposto em "Todas as
+comandas" tanto no Gestor (`gestor/comandas/page.tsx`) quanto no Caixa
+(painel `TodasComandasPanel`) como "pedido #N · usada X vez(es)" por
+linha.
+
+**Liberar comanda sem consumo, direto na portaria (2026-09-09)**: pedido
+do usuário — se o cliente pegou a comanda e não consumiu nada, o
+Porteiro não deveria precisar mandar ele pro Caixa fechar um pagamento
+de R$ 0,00 só pra poder liberar. `LiberarComanda`
+(`internal/usecase/liberar_comanda.go`) agora aceita liberar uma comanda
+`em_uso` diretamente quando `SomarTotalAtivo` dá zero pra ela (nenhum
+item ativo lançado) — sem exigir `status == paga`. Se tiver qualquer
+consumo real, continua bloqueada com `ErrComandaComSaldoPendente`
+("direcione o cliente ao caixa"), sem mudança de comportamento. No
+frontend, `proximaAcao` (`porteiro/page.tsx`) passou a tentar `liberar`
+também pra `em_uso` (antes só tentava pra `paga`, e `em_uso` sempre
+caía direto no bloqueio vermelho) — o backend decide se libera ou
+recusa, e a tela mostra verde/vermelho de acordo com a resposta real,
+não mais com o status bruto. Testado ao vivo: comanda sem nenhum item
+libera na hora (verde, "Liberada — pode sair"); comanda com item
+real continua bloqueada (vermelho, "consumo pendente").
+
+**Mensagem de conflito mais clara por status (2026-09-09)**: usuário
+reportou confusão real testando o fluxo acima — pagou a comanda no
+Caixa, ela foi liberada (`disponivel`), e ao tentar lançar item de novo
+nela (sem passar pelo Porteiro) viu "comanda já finalizada — lançamento
+rejeitado". Correto tecnicamente (`AceitaLancamento()` só permite
+`em_uso`), mas a mensagem genérica não deixava claro que a solução é só
+escanear na Portaria de novo (o Porteiro precisa "entregar" a comanda —
+criar um atendimento novo — antes que Balança/Garçom aceitem qualquer
+lançamento; é bem mais comum no dia a dia do que o conflito raro de
+sincronização de verdade que essa mensagem foi pensada originalmente
+pra cobrir). `motivoConflito` (novo,
+`internal/usecase/conflito_sincronizacao.go`, usado por
+`RegistrarPeso`/`LancarItem`) agora varia o texto pelo status real:
+`disponivel` → "peça pro porteiro entregar ela de novo antes de
+lançar"; `paga` → "aguardando o porteiro liberar na saída"; `cancelada`
+→ mensagem própria. Continua sendo `ErrConflitoSincronizacao`
+por baixo (`errors.Is` no handler não muda), só o texto fica mais
+específico.
+
+## Reabrir comanda paga sem passar pelo Porteiro (2026-09-09)
+
+Usuário corrigiu o entendimento do item anterior: o cenário real não era
+"a comanda está vazia", era "o cliente já pagou mas continua na mesa e
+quer pedir mais" — o cartão físico nunca saiu de perto dele, então exigir
+uma passagem pela Portaria (que só cuida de entrada/saída, seção 7) não
+fazia sentido. Diferente de `AbrirComanda` (US-07, sempre a partir de
+`disponivel`), nova entidade: `domain.Comanda.PodeSerReaberta()` (só
+`paga`) + `usecase.ReabrirComanda`
+(`internal/usecase/reabrir_comanda.go`) — inicia um atendimento novo
+(a conta já paga fica intacta, separada, nunca somada de novo) e chama o
+MESMO `ComandaRepository.AbrirComanda` que a entrega normal usa, só
+passando a mesa que a comanda já tinha (`comanda.TableID`) em vez de uma
+nova — nenhum método de repositório novo precisou ser escrito.
+`POST /comandas/:codigo/reabrir` não leva `RequerPermissao` de propósito
+(mesmo raciocínio de `TransferirMesa`) — Balança e Garçom precisam
+igualmente, não só um perfil. No frontend, tanto `garcom/page.tsx`
+quanto `balanca/page.tsx` chamam `/reabrir` automaticamente e sem
+confirmação quando encontram uma comanda `paga` ao escanear — a
+experiência é transparente, o operador nem percebe que houve uma
+reabertura, só que a comanda já está pronta pra receber o próximo
+lançamento. Testado ao vivo: comanda paga com mesa associada, escaneada
+no Garçom, reabre na hora com a mesma mesa e R$ 0,00 (não herda nada do
+ciclo já pago).
+
+**Mensagem duplicada corrigida (2026-09-09)**: usuário reportou ver
+"comanda está disponível — peça pro porteiro entregar ela de novo antes
+de lançar: comanda já finalizada — lançamento rejeitado e alerta enviado
+ao Gestor. Chame o Gestor se isso for inesperado." — a frase específica
+(motivoConflito) concatenada com a genérica antiga (ErrConflitoSincronizacao)
+mais o texto que o frontend ainda acrescentava por cima. Corrigido nos
+dois lados: `motivoConflito` (`conflito_sincronizacao.go`) agora usa um
+tipo de erro próprio (`erroConflito`, com `Unwrap()` pra
+`errors.Is(err, ErrConflitoSincronizacao)` continuar funcionando no
+handler) cujo `Error()` é só o motivo específico, sem herdar o texto
+genérico por trás; `merka-web/app/(garcom)/garcom/page.tsx` e
+`.../balanca/page.tsx` pararam de acrescentar "Chame o Gestor se isso
+for inesperado" (fazia sentido só pro conflito raro de sincronização de
+verdade, não pro caso comum de "está disponível, `peça pro porteiro`").
+
+## Porteiro deixa de ser porta obrigatória pra ABRIR comanda (2026-09-09)
+
+Usuário insistiu no ponto anterior: a comanda em questão nunca teve
+nenhum item — não fazia sentido exigir passar pelo Porteiro de novo só
+porque ela estava `disponivel`. Pergunta direta ("sempre, ou só quando
+nunca teve consumo?") → resposta: **sempre**. Decisão: o Porteiro
+continua controlando a SAÍDA (só ele chama `/liberar`, permissão mantida
+— `PermissaoEntregarComanda`), mas deixou de ser porta obrigatória pra
+USAR uma comanda. `GET /comandas/:codigo` e
+`POST /comandas/:codigo/abrir` perderam o `RequerPermissao` (mesmo
+raciocínio já usado em `PATCH /comandas/:id/mesa` e
+`POST /comandas/:codigo/reabrir` — comentário atualizado em
+`RegistrarRotas`). No frontend, `garcom/page.tsx` e `balanca/page.tsx`
+agora tratam `disponivel` e `paga` do mesmo jeito que já tratavam
+`paga`: abrem (ou reabrem) direto ao escanear, transparente, sem
+confirmação — só quando o status realmente não permite (`em_uso` de
+outra sessão, `cancelada`) é que aparece erro de verdade. Testado ao
+vivo: Garçom escaneou uma comanda `disponivel` sem passar pelo Porteiro,
+associou mesa e lançou um item com sucesso, ciclo completo.
+
 ## Requisitos não-negociáveis (vieram de decisões explícitas do usuário)
 
 1. **Auditoria total**: toda ação de todo perfil precisa ser logada
@@ -118,7 +262,7 @@ negócio é um arquivo em `usecase/` (ex: `abrir_comanda.go`,
 | Admin Super | Tudo, incluindo criar perfis e alterar config estrutural |
 | Gestor | Tudo igual ao Admin Super, EXCETO criar perfis/config estrutural |
 | Garçom | Lançar/remover item unitário; transferir mesa |
-| Porteiro | Entregar/receber comanda física; bloquear saída com saldo devedor |
+| Porteiro | Liberar comanda na saída (bloqueia se tiver saldo devedor) — ver nota de 2026-09-09: abrir comanda deixou de ser exclusivo do Porteiro, Balança/Garçom também abrem direto |
 | Caixa | Fechar pagamento (misto), emitir nota, aplicar desconto, cadastrar produto |
 | Balança | Registrar/estornar peso; ajustar preço/kg e tara de produto existente |
 

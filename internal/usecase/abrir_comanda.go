@@ -20,14 +20,16 @@ import (
 var ErrComandaNaoDisponivel = errors.New("comanda não está disponível para entrega")
 
 // AbrirComanda orquestra a entrega de uma comanda física ao cliente pelo
-// Porteiro (US-07): valida a regra de domínio e persiste a transição
+// Porteiro (US-07): valida a regra de domínio, inicia um novo atendimento
+// (ciclo de uso — ver domain.Atendimento) e persiste a transição
 // disponivel -> em_uso, associando a mesa informada (se houver).
 type AbrirComanda struct {
-	repo repository.ComandaRepository
+	repo            repository.ComandaRepository
+	atendimentoRepo repository.AtendimentoRepository
 }
 
-func NewAbrirComanda(repo repository.ComandaRepository) *AbrirComanda {
-	return &AbrirComanda{repo: repo}
+func NewAbrirComanda(repo repository.ComandaRepository, atendimentoRepo repository.AtendimentoRepository) *AbrirComanda {
+	return &AbrirComanda{repo: repo, atendimentoRepo: atendimentoRepo}
 }
 
 func (uc *AbrirComanda) Executar(ctx context.Context, tenantID uuid.UUID, codigoFisico string, tableID *uuid.UUID) (*domain.Comanda, error) {
@@ -40,8 +42,13 @@ func (uc *AbrirComanda) Executar(ctx context.Context, tenantID uuid.UUID, codigo
 		return nil, motivoBloqueio(comanda.Status)
 	}
 
+	atendimento, err := uc.atendimentoRepo.Iniciar(ctx, tenantID, comanda.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	agora := time.Now()
-	if err := uc.repo.AbrirComanda(ctx, comanda.ID, tableID, agora); err != nil {
+	if err := uc.repo.AbrirComanda(ctx, comanda.ID, tableID, atendimento.ID, agora); err != nil {
 		return nil, err
 	}
 
@@ -49,6 +56,8 @@ func (uc *AbrirComanda) Executar(ctx context.Context, tenantID uuid.UUID, codigo
 	comanda.TableID = tableID
 	comanda.AbertaEm = &agora
 	comanda.FechadaEm = nil
+	comanda.AtendimentoAtualID = &atendimento.ID
+	comanda.NumeroAtendimentoAtual = &atendimento.Numero
 
 	return comanda, nil
 }

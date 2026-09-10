@@ -64,6 +64,7 @@ func main() {
 	authHandler.RegistrarRotas(app)
 
 	comandaRepo := postgres.NewComandaRepository(pool)
+	atendimentoRepo := postgres.NewAtendimentoRepository(pool)
 	productRepo := postgres.NewProductRepository(pool)
 	orderItemRepo := postgres.NewOrderItemRepository(pool)
 	paymentRepo := postgres.NewPaymentRepository(pool)
@@ -134,13 +135,14 @@ func main() {
 	editarMesa := usecase.NewEditarMesa(tableRepo)
 	desativarMesa := usecase.NewDesativarMesa(tableRepo)
 	reativarMesa := usecase.NewReativarMesa(tableRepo)
-	abrirComanda := usecase.NewAbrirComanda(comandaRepo)
+	abrirComanda := usecase.NewAbrirComanda(comandaRepo, atendimentoRepo)
+	reabrirComanda := usecase.NewReabrirComanda(comandaRepo, atendimentoRepo)
 	registrarPeso := usecase.NewRegistrarPeso(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
 	lancarItem := usecase.NewLancarItem(comandaRepo, productRepo, orderItemRepo, syncAlertRepo)
-	liberarComanda := usecase.NewLiberarComanda(comandaRepo)
-	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo)
+	liberarComanda := usecase.NewLiberarComanda(comandaRepo, orderItemRepo, atendimentoRepo)
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo, atendimentoRepo)
 	transferirMesa := usecase.NewTransferirMesa(comandaRepo)
-	aplicarDesconto := usecase.NewAplicarDesconto(orderItemRepo, discountRepo)
+	aplicarDesconto := usecase.NewAplicarDesconto(comandaRepo, orderItemRepo, discountRepo)
 	estornarPeso := usecase.NewEstornarPeso(orderItemRepo)
 	removerItem := usecase.NewRemoverItem(orderItemRepo)
 	cadastrarProduto := usecase.NewCadastrarProduto(productRepo, productPriceHistoryRepo)
@@ -166,7 +168,7 @@ func main() {
 	excluirComanda := usecase.NewExcluirComanda(comandaRepo)
 
 	comandaHandler := handler.NewComandaHandler(
-		consultarComanda, listarItensComanda, abrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
+		consultarComanda, listarItensComanda, abrirComanda, reabrirComanda, registrarPeso, lancarItem, liberarComanda, cancelarComanda, transferirMesa, aplicarDesconto,
 		listarTodasComandas, criarComanda, excluirComanda,
 		auditWriter, hub, permissionRepo, rateLimitEscritaCritica,
 	)

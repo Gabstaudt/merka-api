@@ -31,7 +31,7 @@ func TestCancelarComanda_ItensMarcadosNaoDeletados(t *testing.T) {
 		{ID: item2ID, TenantID: tenantID, ComandaID: comandaID, Valor: 14.00, Status: domain.StatusItemAtivo},
 	}}
 
-	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo)
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, orderItemRepo, &fakeAtendimentoRepo{})
 
 	resultado, err := cancelarComanda.Executar(context.Background(), tenantID, comandaID, userID, "cliente desistiu")
 	if err != nil {
@@ -72,7 +72,7 @@ func TestCancelarComanda_ExigeMotivo(t *testing.T) {
 	comandaRepo := &fakeComandaRepo{comandas: map[uuid.UUID]*domain.Comanda{
 		comandaID: {ID: comandaID, TenantID: tenantID, Status: domain.StatusEmUso},
 	}}
-	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, &fakeOrderItemRepo{})
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, &fakeOrderItemRepo{}, &fakeAtendimentoRepo{})
 
 	_, err := cancelarComanda.Executar(context.Background(), tenantID, comandaID, uuid.New(), "")
 	if !errors.Is(err, usecase.ErrMotivoObrigatorio) {
@@ -89,7 +89,7 @@ func TestCancelarComanda_SoComandaEmUso(t *testing.T) {
 	comandaRepo := &fakeComandaRepo{comandas: map[uuid.UUID]*domain.Comanda{
 		comandaID: {ID: comandaID, TenantID: tenantID, Status: domain.StatusPaga},
 	}}
-	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, &fakeOrderItemRepo{})
+	cancelarComanda := usecase.NewCancelarComanda(comandaRepo, &fakeOrderItemRepo{}, &fakeAtendimentoRepo{})
 
 	_, err := cancelarComanda.Executar(context.Background(), tenantID, comandaID, uuid.New(), "motivo válido")
 	if !errors.Is(err, usecase.ErrComandaNaoPodeSerCancelada) {

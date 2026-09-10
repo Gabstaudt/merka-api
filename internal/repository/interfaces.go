@@ -39,13 +39,15 @@ type ComandaRepository interface {
 	AtualizarStatus(ctx context.Context, comandaID uuid.UUID, novoStatus domain.StatusComanda) error
 
 	// AbrirComanda persiste a transição disponivel -> em_uso feita pelo
-	// Porteiro (US-07): seta status, mesa associada (opcional) e o
-	// timestamp de abertura.
-	AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error
+	// Porteiro (US-07): seta status, mesa associada (opcional), o novo
+	// atendimento (ciclo de uso — ver domain.Atendimento) e o timestamp
+	// de abertura.
+	AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, atendimentoID uuid.UUID, abertaEm time.Time) error
 
 	// LiberarParaReuso reseta a comanda pro estoque (US-08/US-15): status
-	// volta a 'disponivel', mesa/abertura são limpas e fechada_em registra
-	// o fim do ciclo (a próxima AbrirComanda zera fechada_em de novo).
+	// volta a 'disponivel', mesa/abertura/atendimento_atual_id são
+	// limpos e fechada_em registra o fim do ciclo (a próxima AbrirComanda
+	// zera fechada_em de novo).
 	LiberarParaReuso(ctx context.Context, comandaID uuid.UUID) error
 
 	// AtualizarMesa troca a mesa associada a uma comanda (US-16) sem
@@ -71,6 +73,20 @@ type ComandaRepository interface {
 	// desde a confecção do cartão/pulseira e só entra no banco por seed
 	// (ver merka-api/CLAUDE.md, seção "Comanda física").
 	ListarTodas(ctx context.Context, tenantID uuid.UUID) ([]domain.ComandaVisaoGeral, error)
+}
+
+// AtendimentoRepository define o contrato de persistência para
+// atendimentos (ciclos de uso de uma comanda física — ver
+// domain.Atendimento e migrations/0031_atendimentos.sql).
+type AtendimentoRepository interface {
+	// Iniciar cria um novo atendimento (chamado por AbrirComanda, US-07)
+	// — numero é atribuído automaticamente pelo banco (sequencial).
+	Iniciar(ctx context.Context, tenantID, comandaID uuid.UUID) (*domain.Atendimento, error)
+
+	// Finalizar marca o atendimento como encerrado (chamado por
+	// LiberarComanda/CancelarComanda) — não muda nenhum dado histórico,
+	// só registra quando o ciclo terminou.
+	Finalizar(ctx context.Context, atendimentoID uuid.UUID) error
 }
 
 // TableRepository define o contrato de persistência para mesas do salão

@@ -30,12 +30,13 @@ var ErrValorDescontoInvalido = errors.New("valor do desconto precisa ser maior q
 // percentual sobre o total atual da comanda, sempre com motivo, nunca
 // deixando o total ficar negativo.
 type AplicarDesconto struct {
+	comandaRepo   repository.ComandaRepository
 	orderItemRepo repository.OrderItemRepository
 	discountRepo  repository.DiscountRepository
 }
 
-func NewAplicarDesconto(orderItemRepo repository.OrderItemRepository, discountRepo repository.DiscountRepository) *AplicarDesconto {
-	return &AplicarDesconto{orderItemRepo: orderItemRepo, discountRepo: discountRepo}
+func NewAplicarDesconto(comandaRepo repository.ComandaRepository, orderItemRepo repository.OrderItemRepository, discountRepo repository.DiscountRepository) *AplicarDesconto {
+	return &AplicarDesconto{comandaRepo: comandaRepo, orderItemRepo: orderItemRepo, discountRepo: discountRepo}
 }
 
 func (uc *AplicarDesconto) Executar(ctx context.Context, tenantID, comandaID, userID uuid.UUID, tipo domain.TipoDesconto, valor float64, motivo string) (*domain.Discount, error) {
@@ -47,6 +48,11 @@ func (uc *AplicarDesconto) Executar(ctx context.Context, tenantID, comandaID, us
 	}
 	if valor <= 0 {
 		return nil, ErrValorDescontoInvalido
+	}
+
+	comanda, err := uc.comandaRepo.BuscarPorID(ctx, tenantID, comandaID)
+	if err != nil {
+		return nil, err
 	}
 
 	total, err := uc.orderItemRepo.SomarTotalAtivo(ctx, tenantID, []uuid.UUID{comandaID})
@@ -68,6 +74,7 @@ func (uc *AplicarDesconto) Executar(ctx context.Context, tenantID, comandaID, us
 	discount := &domain.Discount{
 		TenantID:      tenantID,
 		ComandaID:     comandaID,
+		AtendimentoID: comanda.AtendimentoAtualID,
 		Tipo:          tipo,
 		Valor:         valor,
 		ValorAplicado: valorDesconto,

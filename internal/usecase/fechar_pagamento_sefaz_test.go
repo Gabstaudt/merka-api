@@ -216,7 +216,7 @@ func (f *fakeComandaRepo) AtualizarStatus(_ context.Context, comandaID uuid.UUID
 	f.comandas[comandaID].Status = novoStatus
 	return nil
 }
-func (f *fakeComandaRepo) AbrirComanda(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ time.Time) error {
+func (f *fakeComandaRepo) AbrirComanda(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ uuid.UUID, _ time.Time) error {
 	return nil
 }
 func (f *fakeComandaRepo) LiberarParaReuso(_ context.Context, _ uuid.UUID) error { return nil }
@@ -228,6 +228,13 @@ func (f *fakeComandaRepo) Criar(_ context.Context, _ uuid.UUID, _ string) (*doma
 	return nil, nil
 }
 func (f *fakeComandaRepo) Excluir(_ context.Context, _, _ uuid.UUID) error { return nil }
+
+type fakeAtendimentoRepo struct{}
+
+func (f *fakeAtendimentoRepo) Iniciar(_ context.Context, tenantID, comandaID uuid.UUID) (*domain.Atendimento, error) {
+	return &domain.Atendimento{ID: uuid.New(), TenantID: tenantID, ComandaID: comandaID}, nil
+}
+func (f *fakeAtendimentoRepo) Finalizar(_ context.Context, _ uuid.UUID) error { return nil }
 
 type fakeOrderItemRepo struct {
 	itens []domain.OrderItem

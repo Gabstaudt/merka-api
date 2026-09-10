@@ -318,7 +318,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar. O porteiro só escaneia; quem escolhe a ação é o sistema.",
+                "description": "Só leitura, sem auditoria (não muda estado nenhum) — usado pelo Porteiro (US-07/US-08) pra decidir sozinho, a partir do status devolvido, se a próxima chamada é POST /abrir ou POST /liberar, e também por Balança/Garçom pra resolver o código antes de abrir/lançar. Qualquer perfil autenticado.",
                 "produces": [
                     "application/json"
                 ],
@@ -379,7 +379,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Porteiro escaneia/seleciona a comanda física e o sistema a marca como \"em_uso\", associando-a opcionalmente a uma mesa. Falha se a comanda não estiver com status \"disponivel\". Requer autenticação (Authorization: Bearer \u003ctoken\u003e).",
+                "description": "Marca a comanda como \"em_uso\", associando-a opcionalmente a uma mesa — chamado pelo Porteiro (entrega normal) ou diretamente por Balança/Garçom quando encontram uma comanda \"disponivel\" (sem depender do Porteiro ter escaneado antes). Falha se a comanda não estiver com status \"disponivel\". Qualquer perfil autenticado.",
                 "consumes": [
                     "application/json"
                 ],
@@ -504,6 +504,76 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "comanda ainda não foi paga",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "erro interno",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/comandas/{codigo}/reabrir": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Diferente de /abrir (US-07, sempre a partir de \"disponivel\", porta de entrada do Porteiro) — reabre uma comanda \"paga\" direto de Balança/Garçom, sem passar pela Portaria, porque o cartão físico nunca saiu da mesa. Inicia um atendimento novo (a conta já paga fica intacta, separada); mantém a mesma mesa.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "comandas"
+                ],
+                "summary": "Reabrir comanda já paga (cliente ainda na mesa, quer pedir mais)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Código físico da comanda",
+                        "name": "codigo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_merka_api_internal_domain.Comanda"
+                        }
+                    },
+                    "401": {
+                        "description": "token ausente, inválido ou expirado",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "comanda não encontrada",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "comanda não está paga — não há o que reabrir",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -3345,6 +3415,10 @@ const docTemplate = `{
                 "abertaEm": {
                     "type": "string"
                 },
+                "atendimentoAtualID": {
+                    "description": "AtendimentoAtualID aponta pro ciclo de uso corrente (ver\ndomain.Atendimento) — não nulo enquanto Status == StatusEmUso (e\ntambém durante StatusPaga, até o Porteiro liberar de volta pro\nestoque). É o que isola os itens/descontos deste atendimento dos\nde atendimentos anteriores da mesma comanda física reutilizada.",
+                    "type": "string"
+                },
                 "codigoFisico": {
                     "type": "string"
                 },
@@ -3353,6 +3427,11 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "numeroAtendimentoAtual": {
+                    "description": "NumeroAtendimentoAtual é o \"número do pedido\" (sequencial,\natendimentos.numero) do ciclo de uso corrente — não é uma coluna\nde comandas, é preenchido via JOIN só nas consultas que precisam\nmostrar isso ao cliente (cupom impresso). Nulo quando\nAtendimentoAtualID é nulo.",
+                    "type": "integer",
+                    "format": "int64"
                 },
                 "status": {
                     "$ref": "#/definitions/github_com_merka_api_internal_domain.StatusComanda"
@@ -3372,6 +3451,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "aplicadoPor": {
+                    "type": "string"
+                },
+                "atendimentoID": {
+                    "description": "ciclo de uso da comanda em que este desconto foi aplicado — ver domain.Atendimento",
                     "type": "string"
                 },
                 "comandaID": {
@@ -3485,6 +3568,10 @@ const docTemplate = `{
         "github_com_merka_api_internal_domain.OrderItem": {
             "type": "object",
             "properties": {
+                "atendimentoID": {
+                    "description": "ciclo de uso da comanda em que este item foi lançado — ver domain.Atendimento",
+                    "type": "string"
+                },
                 "comandaID": {
                     "type": "string"
                 },
@@ -3886,11 +3973,17 @@ const docTemplate = `{
                 "mesa": {
                     "type": "string"
                 },
+                "numero_atendimento_atual": {
+                    "type": "integer"
+                },
                 "quantidade_itens": {
                     "type": "integer"
                 },
                 "status": {
                     "type": "string"
+                },
+                "total_atendimentos": {
+                    "type": "integer"
                 },
                 "valor_total": {
                     "type": "number"

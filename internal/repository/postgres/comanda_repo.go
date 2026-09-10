@@ -37,16 +37,17 @@ func NewComandaRepository(pool *pgxpool.Pool) repository.ComandaRepository {
 
 func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.UUID, codigoFisico string) (*domain.Comanda, error) {
 	const query = `
-		SELECT id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em
-		FROM comandas
-		WHERE tenant_id = $1 AND codigo_fisico = $2
+		SELECT c.id, c.tenant_id, c.codigo_fisico, c.status, c.table_id, c.aberta_em, c.fechada_em, c.atendimento_atual_id, a.numero
+		FROM comandas c
+		LEFT JOIN atendimentos a ON a.id = c.atendimento_atual_id
+		WHERE c.tenant_id = $1 AND c.codigo_fisico = $2
 	`
 
 	db := connFromCtx(ctx, r.pool)
 
 	var c domain.Comanda
 	err := db.QueryRow(ctx, query, tenantID, codigoFisico).Scan(
-		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
+		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm, &c.AtendimentoAtualID, &c.NumeroAtendimentoAtual,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrComandaNaoEncontrada
@@ -60,16 +61,17 @@ func (r *comandaRepository) BuscarPorCodigo(ctx context.Context, tenantID uuid.U
 
 func (r *comandaRepository) BuscarPorID(ctx context.Context, tenantID, comandaID uuid.UUID) (*domain.Comanda, error) {
 	const query = `
-		SELECT id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em
-		FROM comandas
-		WHERE tenant_id = $1 AND id = $2
+		SELECT c.id, c.tenant_id, c.codigo_fisico, c.status, c.table_id, c.aberta_em, c.fechada_em, c.atendimento_atual_id, a.numero
+		FROM comandas c
+		LEFT JOIN atendimentos a ON a.id = c.atendimento_atual_id
+		WHERE c.tenant_id = $1 AND c.id = $2
 	`
 
 	db := connFromCtx(ctx, r.pool)
 
 	var c domain.Comanda
 	err := db.QueryRow(ctx, query, tenantID, comandaID).Scan(
-		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
+		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm, &c.AtendimentoAtualID, &c.NumeroAtendimentoAtual,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrComandaNaoEncontrada
@@ -123,15 +125,15 @@ func (r *comandaRepository) AtualizarStatus(ctx context.Context, comandaID uuid.
 	return nil
 }
 
-func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, abertaEm time.Time) error {
+func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUID, tableID *uuid.UUID, atendimentoID uuid.UUID, abertaEm time.Time) error {
 	const query = `
 		UPDATE comandas
-		SET status = $1, table_id = $2, aberta_em = $3, fechada_em = NULL
-		WHERE id = $4
+		SET status = $1, table_id = $2, atendimento_atual_id = $3, aberta_em = $4, fechada_em = NULL
+		WHERE id = $5
 	`
 
 	db := connFromCtx(ctx, r.pool)
-	tag, err := db.Exec(ctx, query, domain.StatusEmUso, tableID, abertaEm, comandaID)
+	tag, err := db.Exec(ctx, query, domain.StatusEmUso, tableID, atendimentoID, abertaEm, comandaID)
 	if err != nil {
 		return fmt.Errorf("abrir comanda: %w", err)
 	}
@@ -145,7 +147,7 @@ func (r *comandaRepository) AbrirComanda(ctx context.Context, comandaID uuid.UUI
 func (r *comandaRepository) LiberarParaReuso(ctx context.Context, comandaID uuid.UUID) error {
 	const query = `
 		UPDATE comandas
-		SET status = $1, table_id = NULL, aberta_em = NULL, fechada_em = now()
+		SET status = $1, table_id = NULL, atendimento_atual_id = NULL, aberta_em = NULL, fechada_em = now()
 		WHERE id = $2
 	`
 
@@ -172,14 +174,14 @@ func (r *comandaRepository) Criar(ctx context.Context, tenantID uuid.UUID, codig
 	const query = `
 		INSERT INTO comandas (tenant_id, codigo_fisico, status)
 		VALUES ($1, $2, $3)
-		RETURNING id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em
+		RETURNING id, tenant_id, codigo_fisico, status, table_id, aberta_em, fechada_em, atendimento_atual_id
 	`
 
 	db := connFromCtx(ctx, r.pool)
 
 	var c domain.Comanda
 	err := db.QueryRow(ctx, query, tenantID, codigoFisico, domain.StatusDisponivel).Scan(
-		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm,
+		&c.ID, &c.TenantID, &c.CodigoFisico, &c.Status, &c.TableID, &c.AbertaEm, &c.FechadaEm, &c.AtendimentoAtualID,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -193,16 +195,28 @@ func (r *comandaRepository) Criar(ctx context.Context, tenantID uuid.UUID, codig
 }
 
 func (r *comandaRepository) ListarTodas(ctx context.Context, tenantID uuid.UUID) ([]domain.ComandaVisaoGeral, error) {
+	// A contagem de atendimentos vem de uma subquery pré-agregada (ah),
+	// não de um LEFT JOIN direto na tabela atendimentos — juntar duas
+	// tabelas de detalhe (order_items E atendimentos) direto na mesma
+	// comanda multiplicaria as linhas em cruz e inflaria a soma/contagem
+	// de itens (produto cartesiano). Pré-agregando primeiro, cada comanda
+	// só junta UMA linha de "quantas vezes foi usada".
 	const query = `
 		SELECT
 			c.id, c.codigo_fisico, c.status, t.identificador, c.aberta_em,
 			COUNT(oi.id) FILTER (WHERE oi.status = 'ativo'),
-			COALESCE(SUM(oi.valor) FILTER (WHERE oi.status = 'ativo'), 0)
+			COALESCE(SUM(oi.valor) FILTER (WHERE oi.status = 'ativo'), 0),
+			a.numero,
+			COALESCE(ah.total, 0)
 		FROM comandas c
 		LEFT JOIN tables t ON t.id = c.table_id
 		LEFT JOIN order_items oi ON oi.comanda_id = c.id
+		LEFT JOIN atendimentos a ON a.id = c.atendimento_atual_id
+		LEFT JOIN (
+			SELECT comanda_id, COUNT(*) AS total FROM atendimentos GROUP BY comanda_id
+		) ah ON ah.comanda_id = c.id
 		WHERE c.tenant_id = $1
-		GROUP BY c.id, c.codigo_fisico, c.status, t.identificador, c.aberta_em
+		GROUP BY c.id, c.codigo_fisico, c.status, t.identificador, c.aberta_em, a.numero, ah.total
 		ORDER BY c.codigo_fisico
 	`
 
@@ -216,7 +230,10 @@ func (r *comandaRepository) ListarTodas(ctx context.Context, tenantID uuid.UUID)
 	var comandas []domain.ComandaVisaoGeral
 	for rows.Next() {
 		var c domain.ComandaVisaoGeral
-		if err := rows.Scan(&c.ID, &c.CodigoFisico, &c.Status, &c.MesaIdentificador, &c.AbertaEm, &c.QuantidadeItens, &c.ValorTotal); err != nil {
+		if err := rows.Scan(
+			&c.ID, &c.CodigoFisico, &c.Status, &c.MesaIdentificador, &c.AbertaEm, &c.QuantidadeItens, &c.ValorTotal,
+			&c.NumeroAtendimentoAtual, &c.TotalAtendimentos,
+		); err != nil {
 			return nil, fmt.Errorf("ler linha de comanda: %w", err)
 		}
 		comandas = append(comandas, c)

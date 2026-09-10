@@ -2,20 +2,12 @@ package usecase
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 
 	"github.com/merka/api/internal/domain"
 	"github.com/merka/api/internal/repository"
 )
-
-// ErrConflitoSincronizacao é retornado quando a comanda não aceita mais
-// lançamento (ex: já paga/cancelada) — seção 15 do documento de
-// planejamento. O caller (handler) deve responder com um status claro
-// (409), nunca travar/derrubar o servidor: o lançamento é rejeitado e um
-// registro em sync_alerts já foi gravado para o Gestor.
-var ErrConflitoSincronizacao = errors.New("comanda já finalizada — lançamento rejeitado e alerta enviado ao Gestor")
 
 // RegistrarPeso orquestra o lançamento de um item pesado na balança
 // (US-09): valida se a comanda aceita lançamento, calcula o valor a
@@ -58,7 +50,7 @@ func (uc *RegistrarPeso) Executar(ctx context.Context, tenantID, comandaID, prod
 		if alertErr := uc.syncAlertRepo.RegistrarConflitoComandaFinalizada(ctx, tenantID, comandaID, userID, detalhes); alertErr != nil {
 			return nil, alertErr
 		}
-		return nil, ErrConflitoSincronizacao
+		return nil, motivoConflito(comanda.Status)
 	}
 
 	product, err := uc.productRepo.BuscarPorID(ctx, tenantID, productID)
@@ -66,7 +58,7 @@ func (uc *RegistrarPeso) Executar(ctx context.Context, tenantID, comandaID, prod
 		return nil, err
 	}
 
-	item := domain.NovoOrderItemPeso(tenantID, comandaID, product, pesoBruto, userID)
+	item := domain.NovoOrderItemPeso(tenantID, comandaID, comanda.AtendimentoAtualID, product, pesoBruto, userID)
 	if err := uc.orderItemRepo.Criar(ctx, item); err != nil {
 		return nil, err
 	}

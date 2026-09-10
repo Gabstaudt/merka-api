@@ -21,12 +21,13 @@ var ErrComandaNaoPodeSerCancelada = errors.New("só é possível cancelar uma co
 // comanda como cancelada e a libera de volta pro estoque, exatamente como
 // descrito na seção 13.7 do documento de planejamento.
 type CancelarComanda struct {
-	comandaRepo   repository.ComandaRepository
-	orderItemRepo repository.OrderItemRepository
+	comandaRepo     repository.ComandaRepository
+	orderItemRepo   repository.OrderItemRepository
+	atendimentoRepo repository.AtendimentoRepository
 }
 
-func NewCancelarComanda(comandaRepo repository.ComandaRepository, orderItemRepo repository.OrderItemRepository) *CancelarComanda {
-	return &CancelarComanda{comandaRepo: comandaRepo, orderItemRepo: orderItemRepo}
+func NewCancelarComanda(comandaRepo repository.ComandaRepository, orderItemRepo repository.OrderItemRepository, atendimentoRepo repository.AtendimentoRepository) *CancelarComanda {
+	return &CancelarComanda{comandaRepo: comandaRepo, orderItemRepo: orderItemRepo, atendimentoRepo: atendimentoRepo}
 }
 
 func (uc *CancelarComanda) Executar(ctx context.Context, tenantID, comandaID, userID uuid.UUID, motivo string) (*domain.Comanda, error) {
@@ -58,9 +59,16 @@ func (uc *CancelarComanda) Executar(ctx context.Context, tenantID, comandaID, us
 	if err := uc.comandaRepo.LiberarParaReuso(ctx, comandaID); err != nil {
 		return nil, err
 	}
+	if comanda.AtendimentoAtualID != nil {
+		if err := uc.atendimentoRepo.Finalizar(ctx, *comanda.AtendimentoAtualID); err != nil {
+			return nil, err
+		}
+	}
 
 	comanda.Status = domain.StatusDisponivel
 	comanda.TableID = nil
 	comanda.AbertaEm = nil
+	comanda.AtendimentoAtualID = nil
+	comanda.NumeroAtendimentoAtual = nil
 	return comanda, nil
 }
